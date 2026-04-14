@@ -58,7 +58,7 @@ Output: `$SCRATCH/sam_preprocessed_data.nc`
 
 Removes the monthly climatology, per-pixel linear trend, and applies cosine weighting to the global ERA5 MSL field. Saves the anomaly alongside the raw data and preprocessing artefacts.
 
-**Hardware**: Requires ~96 GB RAM and ~20 minutes on a single node. On NCAR Derecho, submit via PBS Batch (see [Running on HPC with PBS](#running-on-hpc-with-pbs) below).
+**Hardware**: Requires ~96 GB RAM and ~30 minutes on a single node. On NCAR Derecho, submit via PBS Batch (see [Running on HPC with PBS](#running-on-hpc-with-pbs) below).
 
 ---
 

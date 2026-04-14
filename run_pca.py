@@ -19,39 +19,32 @@ import time
 import numpy as np
 import xarray as xr
 
-START_TIME  = time.time()
-DATA_DIR    = os.path.expandvars("/glade/derecho/scratch/$USER")
-INPUT_FILE  = os.path.join(DATA_DIR, "sam_preprocessed_data.nc")
+START_TIME = time.time()
+DATA_DIR = os.path.expandvars("/glade/derecho/scratch/$USER")
+INPUT_FILE = os.path.join(DATA_DIR, "sam_preprocessed_data.nc")
 OUTPUT_FILE = os.path.join(DATA_DIR, "sam_pca_data.nc")
 
 N_MODES = 3 # we will use this as a baseline for future analysis. can be changed to anything!
 LAT_BOUNDS = (-90, -20)
 
-# load the preprocessed SAM MSL anomalies
+# load the preprocessed SAM MSL anomalies (already cosine-weighted by run_preprocess_msl.py)
 data = xr.open_dataset(INPUT_FILE, chunks={"time": 12})["removed_trend_and_climatology"]
 # select the southern hemisphere
 data_sh = data.sel(latitude=slice(LAT_BOUNDS[0], LAT_BOUNDS[1])).compute()
 
-# apply area weighting because the earth is curved
-weights = np.cos(np.deg2rad(data_sh.latitude))
-weights = weights / weights.mean() # normalize the weights
 data_2d = data_sh.values.reshape(len(data_sh.time), len(data_sh.latitude) * len(data_sh.longitude))
-weights_2d = np.repeat(weights.values[:, np.newaxis], len(data_sh.longitude), axis=1).flatten()
-data_weighted = data_2d * np.sqrt(weights_2d)[np.newaxis, :]
-data_centered = data_weighted - data_weighted.mean(axis=0) # center the data
+data_centered = data_2d - data_2d.mean(axis=0) # center the data
 
 # run the SVD
 U, S, Vt = np.linalg.svd(data_centered, full_matrices=False)
-U  = U[:, :N_MODES]
-S  = S[:N_MODES]
+U = U[:, :N_MODES]
+S = S[:N_MODES]
 Vt = Vt[:N_MODES, :]
 
 # calculate the variance explained based on magnitude of S
 variance_explained = (S ** 2) / np.sum(data_centered ** 2)
 
-# undo area weighting 
-eofs_2d  = Vt / np.sqrt(weights_2d)[np.newaxis, :]
-eofs_reshaped = eofs_2d.reshape(N_MODES, len(data_sh.latitude), len(data_sh.longitude))
+eofs_reshaped = Vt.reshape(N_MODES, len(data_sh.latitude), len(data_sh.longitude))
 pcs = U * S[np.newaxis, :]
 
 # Normalise so EOFs have unit variance; PCs absorb the magnitude
@@ -73,7 +66,7 @@ ds_out = xr.Dataset(
             },
             attrs={
                 "long_name": "Empirical Orthogonal Functions",
-                "description": "Area-weighted EOF patterns of MSL variability",
+                "description": "EOF patterns of MSL variability (cosine weighting applied in preprocessing)",
                 "units": "normalized",
             },
         ),

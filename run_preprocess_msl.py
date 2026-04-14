@@ -4,8 +4,8 @@ We preprocess the ERA5 monthly mean sea-level pressure (MSL) for SAM analysis in
 
 1. Remove the monthly climatology
 2. Remove a per-pixel linear trend
+3. Apply cosine weighting
 
-We will apply cosine weighting later in the analysis.
 
 Input
 ERA5 monthly MSL files at 0.25° resolution, one file per year:
@@ -14,10 +14,10 @@ ERA5 monthly MSL files at 0.25° resolution, one file per year:
 Output
 sam_preprocessed_data.nc  (written to OUT_DIR)
     Variables:
-        removed_trend_and_climatology  – detrended anomaly (used for training)
-        removed_climatology            – anomaly before detrending
-        MSL                            – raw MSL field
-        polyfit_coefficients           – linear trend coefficients per pixel
+        removed_trend_and_climatology   detrended anomaly (used for training)
+        removed_climatology             anomaly before detrending
+        MSL                             raw MSL field
+        polyfit_coefficients            linear trend coefficients per pixel
 """
 # imports
 import os
@@ -61,7 +61,7 @@ def apply_cosine_weighting(da: xr.DataArray) -> xr.DataArray:
     weights = np.cos(np.deg2rad(da.latitude))
     weights = weights / weights.mean() # normalize the weights
     da = da * weights
-    return da.astype("float32") 
+    return da.astype("float32")
 
 os.makedirs(OUT_DIR, exist_ok=True)
 file_list = build_file_list(START_YEAR, END_YEAR)
@@ -99,7 +99,7 @@ out = xr.Dataset(
         "longitude": ds["longitude"],
     },
     attrs=ds.attrs,
-).chunk({"time": 1,  "latitude": 180, "longitude": 360})
+).chunk({"time": 1, "latitude": 180, "longitude": 360})
 
 encoding = {
     "removed_trend_and_climatology": {"dtype": "float32", "zlib": True, "complevel": 1},

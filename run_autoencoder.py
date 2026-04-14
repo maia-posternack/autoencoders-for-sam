@@ -43,11 +43,11 @@ import json
 # this takes all our arguements and saves them locally
 parser = argparse.ArgumentParser(description="Train SAM MSL autoencoder")
 
-parser.add_argument("--tag",        type=str,   default="sam_ae",
+parser.add_argument("--tag", type=str, default="sam_ae",
                     help="Output label used for all saved filenames (default: sam_ae)")
-parser.add_argument("--input_file", type=str,   default=None,
+parser.add_argument("--input_file", type=str, default=None,
                     help="Path to input .nc file. Defaults to $SCRATCH/sam_preprocessed_data.nc")
-parser.add_argument("--coarsen",    type=int,   default=1,
+parser.add_argument("--coarsen", type=int, default=1,
                     help="Spatial subsampling factor (1=full res, 4=quarter res). Default: 4")
 parser.add_argument(
     "--lat_bounds",
@@ -57,44 +57,44 @@ parser.add_argument(
     metavar=("LAT_MIN", "LAT_MAX"),
     help="Latitude bounds to subset before training (default: -90 -20). Use --lat_bounds -90 90 for global.",
 )
-parser.add_argument("--rounds",     type=int,   nargs="+", default=[64, 32, 16, 8, 4],
+parser.add_argument("--rounds", type=int, nargs="+", default=[64, 32, 16, 8, 4],
                     help="Conv filter sizes per encoder stage, e.g. --rounds 64 32 16 8 4. Default: 64 32 16 8 4")
-parser.add_argument("--pool_size",  type=int,   default=2,
+parser.add_argument("--pool_size", type=int, default=2,
                     help="Pooling factor (applied to both H and W). Default: 2")
-parser.add_argument("--conv_size",  type=int,   default=3,
+parser.add_argument("--conv_size", type=int, default=3,
                     help="Conv kernel size (applied to both H and W). Default: 3")
-parser.add_argument("--epochs",     type=int,   default=50,
+parser.add_argument("--epochs", type=int, default=50,
                     help="Max training epochs (early stopping may end sooner). Default: 50")
-parser.add_argument("--batch_size", type=int,   default=16,
+parser.add_argument("--batch_size", type=int, default=16,
                     help="Training batch size. Default: 16")
-parser.add_argument("--lr",         type=float, default=1e-4,
+parser.add_argument("--lr", type=float, default=1e-4,
                     help="Adam learning rate. Default: 1e-4")
-parser.add_argument("--patience",   type=int,   default=10,
+parser.add_argument("--patience", type=int, default=10,
                     help="Early stopping patience. Default: 10")
-parser.add_argument("--test_size",  type=float, default=0.2,
+parser.add_argument("--test_size", type=float, default=0.2,
                     help="Fraction of data held out for validation. Default: 0.2")
-parser.add_argument("--save_dir",   type=str,   default=None,
+parser.add_argument("--save_dir", type=str, default=None,
                     help="Output directory. Defaults to $SCRATCH/autoencoder_models")
 args = parser.parse_args()
 
-SCRATCH    = os.path.expandvars("/glade/derecho/scratch/$USER")
+SCRATCH = os.path.expandvars("/glade/derecho/scratch/$USER")
 # assumes you have saved the preprocessed SAM MSL anomalies to $SCRATCH/sam_preprocessed_data.nc
 INPUT_FILE = args.input_file or os.path.join(SCRATCH, "sam_preprocessed_data.nc")
-SAVE_DIR   = args.save_dir   or os.path.join(SCRATCH, "autoencoder_models")
+SAVE_DIR = args.save_dir or os.path.join(SCRATCH, "autoencoder_models")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 #set all variables from the arguments
-TAG        = args.tag
-COARSEN    = args.coarsen
+TAG = args.tag
+COARSEN = args.coarsen
 LAT_BOUNDS = tuple(args.lat_bounds) if args.lat_bounds is not None else None
-ROUNDS     = args.rounds
-POOL_SIZE  = (args.pool_size, args.pool_size)
-CONV_SIZE  = (args.conv_size, args.conv_size)
-EPOCHS     = args.epochs
+ROUNDS = args.rounds
+POOL_SIZE = (args.pool_size, args.pool_size)
+CONV_SIZE = (args.conv_size, args.conv_size)
+EPOCHS = args.epochs
 BATCH_SIZE = args.batch_size
-LR         = args.lr
-PATIENCE   = args.patience
-TEST_SIZE  = args.test_size
+LR = args.lr
+PATIENCE = args.patience
+TEST_SIZE = args.test_size
 
 # start the timer
 t0 = time.time()
@@ -135,11 +135,11 @@ if COARSEN > 1:
 
 # get the number of time, latitude, and longitude steps
 n_time = len(da.time)
-n_lat  = len(da.latitude)
-n_lon  = len(da.longitude)
+n_lat = len(da.latitude)
+n_lon = len(da.longitude)
 
 # create a numpy array to store the data
-data_all   = np.empty((n_time, n_lat, n_lon), dtype=np.float32)
+data_all = np.empty((n_time, n_lat, n_lon), dtype=np.float32)
 
 # load the data in chunks to optimize memory usage
 chunk_size = 50
@@ -148,13 +148,13 @@ for start in range(0, n_time, chunk_size):
     data_all[start:end] = np.asarray(da.isel(time=slice(start, end)).load().data)
     print(f"    loaded time {start}–{end-1}")
 
-times  = da.time.values
+times = da.time.values
 lats_coarse = da.latitude.values
 lons_coarse = da.longitude.values
 n_samples, lat_length, lon_length = data_all.shape
 
 # standardize the data
-scaler  = StandardScaler()
+scaler = StandardScaler()
 data_flat = scaler.fit_transform(data_all.reshape(-1, 1))
 data_standardized = data_flat.reshape(n_samples, lat_length, lon_length, 1).astype(np.float32)
 # replace nan with 0
@@ -196,7 +196,7 @@ def build_autoencoder(lat_length, lon_length, pool_size, conv_size, rounds):
 autoencoder, encoder = build_autoencoder(lat_length, lon_length,
                                          POOL_SIZE, CONV_SIZE, ROUNDS)
 autoencoder.summary()
-optimizer  = Adam(learning_rate=LR, clipvalue=1.0)
+optimizer = Adam(learning_rate=LR, clipvalue=1.0)
 early_stop = EarlyStopping(monitor="val_loss", patience=PATIENCE,
                            restore_best_weights=True)
 autoencoder.compile(optimizer=optimizer, loss="mean_absolute_error")
