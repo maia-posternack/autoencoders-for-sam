@@ -27,6 +27,9 @@ import xarray as xr
 import dask
 import time
 
+# Disable HDF5 byte-range file locking (required on Lustre/GPFS parallel filesystems)
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
+
 START_TIME = time.time()
 
 # set the start and end years of the directory
@@ -59,11 +62,17 @@ def remove_linear_trend(da: xr.DataArray) -> tuple[xr.DataArray, xr.DataArray]:
 
 def apply_cosine_weighting(da: xr.DataArray) -> xr.DataArray:
     weights = np.cos(np.deg2rad(da.latitude))
-    weights = weights / weights.mean() # normalize the weights
-    da = da * weights
+    weights = weights / weights.mean()  # normalize so mean weight == 1
+    da = da * np.sqrt(weights)          # sqrt(cos) is the correct Cholesky factor for area-weighted EOF
     return da.astype("float32")
 
 os.makedirs(OUT_DIR, exist_ok=True)
+
+# Remove any stale/incomplete output file to avoid HDF5 lock conflicts on resubmission
+if os.path.exists(OUT_NC):
+    os.remove(OUT_NC)
+    print(f"Removed existing output file: {OUT_NC}")
+
 file_list = build_file_list(START_YEAR, END_YEAR)
 ds = xr.open_mfdataset(
     file_list,

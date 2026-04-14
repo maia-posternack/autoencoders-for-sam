@@ -27,6 +27,9 @@ Our default settings are 64x32x16x8x4 compression, 1x coarsen, 50 epochs.
 
 We can run with `python run_seasonal_autoencoder.py --tag <tag> --season <season> --rounds <rounds> --coarsen <coarsen> --epochs <epochs>`
 """
+
+import time
+print("starting at ", time.time())
 import argparse
 import gc
 import json
@@ -42,6 +45,8 @@ from tensorflow import keras
 from keras import layers
 from keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
+
+print("everything is imported")
 
 
 # this takes all our arguments and saves them locally

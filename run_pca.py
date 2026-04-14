@@ -2,6 +2,8 @@
 """
 In this file we find the SAM using EOF analysis. We will use this as a baseline for future analysis. 
 
+Our input data is cosine-weighted so we undo this at the end of our process. 
+
 Input
 sam_preprocessed_data.nc  (from run_preprocess_msl.py, read from OUT_DIR)
 
@@ -47,6 +49,13 @@ variance_explained = (S ** 2) / np.sum(data_centered ** 2)
 eofs_reshaped = Vt.reshape(N_MODES, len(data_sh.latitude), len(data_sh.longitude))
 pcs = U * S[np.newaxis, :]
 
+# Remove sqrt(cos) weighting from EOFs: preprocessing applied sqrt(cos/mean(cos))
+# to the data, so Vt rows live in that weighted space. Dividing by the same
+# sqrt(cos/mean(cos)) factor recovers physical (unweighted) MSL anomaly patterns.
+cos_weights = np.cos(np.deg2rad(data_sh.latitude.values))
+cos_weights = cos_weights / cos_weights.mean()
+eofs_reshaped = eofs_reshaped / np.sqrt(cos_weights)[np.newaxis, :, np.newaxis]
+
 # Normalise so EOFs have unit variance; PCs absorb the magnitude
 for i in range(N_MODES):
     eof_std = np.nanstd(eofs_reshaped[i])
@@ -66,7 +75,7 @@ ds_out = xr.Dataset(
             },
             attrs={
                 "long_name": "Empirical Orthogonal Functions",
-                "description": "EOF patterns of MSL variability (cosine weighting applied in preprocessing)",
+                "description": "EOF patterns of MSL variability in physical (unweighted) space; cosine weights divided out after SVD",
                 "units": "normalized",
             },
         ),

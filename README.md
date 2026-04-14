@@ -73,7 +73,7 @@ Output: `$SCRATCH/sam_pca_data.nc`
 Computes EOFs of Southern Hemisphere (90°S–20°S) MSL anomalies
 using full SVD and saves the leading three modes.
 
-**Hardware**: Requires ~100 GB RAM (~30 min). On NCAR Derecho, submit via PBS.
+**Hardware**: Requires ~100 GB RAM (~10 min). On NCAR Derecho, submit via PBS.
 
 ---
 
@@ -99,7 +99,7 @@ Outputs (in `$SCRATCH/autoencoder_models/`):
 - `lats_<TAG>.npy`, `lons_<TAG>.npy`, `times_<TAG>.npy`
 - `summary_<TAG>.json`
 
-**Hardware**: This run was performed on a single node with 100 GB RAM and 4 CPU cores on the NCAR Derecho supercomputer. Full-resolution training is memory intensive; use `--coarsen 4` for a lightweight test on a workstation.
+**Hardware**: This run was performed on a single node with 100 GB RAM (~4 hours) and 4 CPU cores on the NCAR Derecho supercomputer. Full-resolution training is memory intensive; use `--coarsen 4` for a lightweight test on a workstation.
 
 ---
 
@@ -153,7 +153,7 @@ update the conda environment path as needed.
 #!/bin/bash
 #PBS -N run_preprocess_msl
 #PBS -A <PROJECT_CODE>
-#PBS -q main
+#PBS -q develop
 #PBS -l select=1:ncpus=8:mem=96GB
 #PBS -l walltime=03:00:00
 #PBS -j oe
@@ -161,6 +161,7 @@ update the conda environment path as needed.
 cd $PBS_O_WORKDIR
 source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
 conda activate sam-autoencoder
+export HDF5_USE_FILE_LOCKING=FALSE
 
 python run_preprocess_msl.py
 ```
@@ -171,7 +172,7 @@ python run_preprocess_msl.py
 #!/bin/bash
 #PBS -N run_pca
 #PBS -A <PROJECT_CODE>
-#PBS -q main
+#PBS -q develop
 #PBS -l select=1:ncpus=8:mem=100GB
 #PBS -l walltime=01:00:00
 #PBS -j oe
@@ -179,6 +180,7 @@ python run_preprocess_msl.py
 cd $PBS_O_WORKDIR
 source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
 conda activate sam-autoencoder
+export HDF5_USE_FILE_LOCKING=FALSE
 
 python run_pca.py
 ```
@@ -189,14 +191,15 @@ python run_pca.py
 #!/bin/bash
 #PBS -N run_autoencoder
 #PBS -A <PROJECT_CODE>
-#PBS -q main
+#PBS -q develop
 #PBS -l select=1:ncpus=4:mem=100GB
-#PBS -l walltime=12:00:00
+#PBS -l walltime=6:00:00
 #PBS -j oe
 
 cd $PBS_O_WORKDIR
 source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
 conda activate sam-autoencoder
+export HDF5_USE_FILE_LOCKING=FALSE
 
 python run_autoencoder.py \
     --tag        sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped \
@@ -216,14 +219,15 @@ Submit one job per season. Example for DJF (repeat for MAM, JJA, SON):
 #!/bin/bash
 #PBS -N run_seasonal_DJF
 #PBS -A <PROJECT_CODE>
-#PBS -q main
+#PBS -q develop
 #PBS -l select=1:ncpus=4:mem=100GB
-#PBS -l walltime=12:00:00
+#PBS -l walltime=6:00:00
 #PBS -j oe
 
 cd $PBS_O_WORKDIR
 source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
 conda activate sam-autoencoder
+export HDF5_USE_FILE_LOCKING=FALSE
 
 SEASON=DJF
 python run_seasonal_autoencoder.py \
@@ -255,8 +259,10 @@ Pre-generated paper figures are included in the `figures/` directory for referen
 
 ## Computing Environment
 
-The scripts were developed and run on the NCAR Derecho supercomputer using the
-`my-npl-tensor` conda environment. See `environment.yml` for the full package list.
+The scripts were developed and run on the NCAR Derecho supercomputer. The authors
+used a pre-existing conda environment named `my-npl-tensor`, located at
+`/glade/work/mposternack/conda-envs/my-npl-tensor`. An equivalent reproducible
+environment is provided via `environment.yml` (named `sam-autoencoder`).
 
 To recreate the environment:
 
