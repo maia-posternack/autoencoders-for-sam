@@ -1,0 +1,20 @@
+# Core scientific stack
+numpy==1.26.4
+xarray==2025.1.1
+dask==2025.1.0
+distributed==2025.1.0
+scipy==1.15.1
+pandas==2.2.3
+scikit-learn==1.6.1
+
+# Deep learning
+tensorflow==2.18.0
+keras==3.9.0
+
+# Visualisation and geospatial
+matplotlib==3.10.0
+cartopy==0.24.0
+
+# NetCDF I/O
+h5netcdf==1.5.0
+netCDF4==1.7.2
