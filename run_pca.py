@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
+
 In this file we find the SAM using EOF analysis. We will use this as a baseline for future analysis. 
 
 Our input data is cosine-weighted so we undo this at the end of our process. 
@@ -49,9 +51,7 @@ variance_explained = (S ** 2) / np.sum(data_centered ** 2)
 eofs_reshaped = Vt.reshape(N_MODES, len(data_sh.latitude), len(data_sh.longitude))
 pcs = U * S[np.newaxis, :]
 
-# Remove sqrt(cos) weighting from EOFs: preprocessing applied sqrt(cos/mean(cos))
-# to the data, so Vt rows live in that weighted space. Dividing by the same
-# sqrt(cos/mean(cos)) factor recovers physical (unweighted) MSL anomaly patterns.
+# Remove cosine weights from the EOFs
 cos_weights = np.cos(np.deg2rad(data_sh.latitude.values))
 cos_weights = cos_weights / cos_weights.mean()
 eofs_reshaped = eofs_reshaped / np.sqrt(cos_weights)[np.newaxis, :, np.newaxis]

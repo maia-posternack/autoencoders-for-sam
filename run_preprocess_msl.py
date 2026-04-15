@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
+
 We preprocess the ERA5 monthly mean sea-level pressure (MSL) for SAM analysis in 3 steps:
 
 1. Remove the monthly climatology
@@ -50,6 +52,7 @@ def build_file_list(start_year: int, end_year: int) -> list[str]:
         files.append(fp)
     return files
 
+#run each of our preprocessing steps!
 def remove_climatology(da: xr.DataArray) -> tuple[xr.DataArray, xr.DataArray]:
     clim = da.groupby("time.month").mean("time")
     anom = (da.groupby("time.month") - clim).reset_coords("month", drop=True)
@@ -63,7 +66,7 @@ def remove_linear_trend(da: xr.DataArray) -> tuple[xr.DataArray, xr.DataArray]:
 def apply_cosine_weighting(da: xr.DataArray) -> xr.DataArray:
     weights = np.cos(np.deg2rad(da.latitude))
     weights = weights / weights.mean()  # normalize so mean weight == 1
-    da = da * np.sqrt(weights)          # sqrt(cos) is the correct Cholesky factor for area-weighted EOF
+    da = da * np.sqrt(weights)         
     return da.astype("float32")
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -85,13 +88,13 @@ ds = xr.open_mfdataset(
     chunks={"time": 12, "latitude": 180, "longitude": 360},
 ).sortby(["time", "latitude", "longitude"])
 
-# remove the monthly climatology and the linear trend
+# apply all steps
 msl = ds["MSL"].astype("float32")
-anom, clim = remove_climatology(msl)
 
+# remove the monthly climatology
+anom, clim = remove_climatology(msl)
 # remove the linear trend
 detrended, polyfit_coefficients = remove_linear_trend(anom)
-
 # apply the cosine weighting
 preprocessed = apply_cosine_weighting(detrended)
 

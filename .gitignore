@@ -19,6 +19,9 @@ __pycache__/
 *.nc
 *.npy
 
+# Keep the pre-extracted latent spaces in the data/ folder
+!data/latent_spaces.nc
+
 # Keras / model output
 *.keras
 *.h5

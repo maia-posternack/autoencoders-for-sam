@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
+
 This script trains season-specific SAM MSL convolutional autoencoders and saves all outputs.
 Since we need to preprocess the data for each season individually, 
 we can't use the output of run_preprocess_msl.py, so we do that here as well. 
@@ -123,7 +125,6 @@ def remove_linear_trend(da: xr.DataArray):
     fit = da.polyfit(dim="time", deg=1)
     detrended = (da - xr.polyval(da.time, fit.polyfit_coefficients)).astype("float32")
     return detrended, fit.polyfit_coefficients
-
 
 def apply_cosine_weights(da: xr.DataArray):
     weights = np.sqrt(np.cos(np.deg2rad(da.latitude.values))).astype(np.float32)

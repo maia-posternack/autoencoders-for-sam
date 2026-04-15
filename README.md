@@ -34,15 +34,7 @@ Step 4:  autoeoncder_analysis.ipynb
 ## Input Data
 
 The preprocessing script reads ERA5 monthly mean sea-level pressure at 0.25°
-resolution from the NCAR Research Data Archive (RDA), dataset
-[d633001](https://rda.ucar.edu/datasets/d633001/):
-
-```
-/glade/campaign/collections/rda/data/d633001/e5.moda.an.sfc/
-  <year>/e5.moda.an.sfc.128_151_msl.ll025sc.<year>010100_<year>120100.nc
-```
-
-If you are working outside NCAR, you can download the equivalent data directly from the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) (ERA5 monthly averaged data on single levels, variable `mean_sea_level_pressure`, 1980–2022) and update the `ERA5_MODA_DIR` variable in `run_preprocess_msl.py`.
+resolution from the NCAR Research Data Archive (RDA). Also availabble at the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).
 
 ---
 
@@ -58,7 +50,7 @@ Output: `$SCRATCH/sam_preprocessed_data.nc`
 
 Removes the monthly climatology, per-pixel linear trend, and applies cosine weighting to the global ERA5 MSL field. Saves the anomaly alongside the raw data and preprocessing artefacts.
 
-**Hardware**: Requires ~96 GB RAM and ~30 minutes on a single node. On NCAR Derecho, submit via PBS Batch (see [Running on HPC with PBS](#running-on-hpc-with-pbs) below).
+**Hardware**: Requires ~96 GB RAM and ~30 minutes on a single node. On NCAR Derecho, submit via PBS Batch. 
 
 ---
 
@@ -127,124 +119,38 @@ Outputs: same as Step 3a plus `climatology_<TAG>.nc` and `polyfit_coefs_<TAG>.nc
 
 ### Step 4 — Run the analysis notebook
 
-Open `autoencoder_analysis.ipynb` and run it top-to-bottom. The notebook is organised in
+Open `figures_and_analysis.ipynb` and run it top-to-bottom. The notebook is organised in
 three sequential parts:
 
 | Part | Description | Key outputs |
 |---|---|---|
 | **Part 1** | Full-year autoencoder: reconstruction quality, elbow analysis, cluster visualisation | `figures/autoencoder_reconstruction.pdf`, `figures/elbow.pdf`, `figures/reconstruction_correlation.pdf` |
-| **Part 2** | Seasonal autoencoders: per-season hierarchical clustering, composite maps | `figures/season_linkages.pdf`, `figures/DJF_clusters.pdf`, etc. |
-| **Part 3** | Time series and comparison: SAM index construction, EOF comparison, Marshall AAO validation, bootstrap test | `figures/compare.pdf`, `figures/time.pdf`, `figures/corr.pdf`, `figures/bootstrap.pdf` |
+| **Part 2** | Time series and comparison: SAM index construction, EOF comparison, Marshall AAO validation, bootstrap test | `figures/compare.pdf`, `figures/time.pdf`, `figures/corr.pdf`, `figures/bootstrap.pdf` |
+| **Part 3** | Seasonal autoencoders: per-season hierarchical clustering, composite maps | `figures/season_linkages.pdf`, `figures/DJF_clusters.pdf`, etc. |
 
-Parts 1–3 must be run top-to-bottom in a single session; Part 3 uses `ds_ae` built in Part 1.
+Parts 1–3 must be run top-to-bottom in a single session; Part 2 uses `ds_ae` built in Part 1.
 
 CHANGE LATER
 
 ---
 
-## Running on HPC with PBS
+## Provided Data
 
-The scripts were originally submitted via PBS on NCAR Derecho. Template batch scripts are shown below. Replace `<PROJECT_CODE>` with your allocation and
-update the conda environment path as needed.
+The `data/` directory contains pre-extracted latent-space representations from all five trained autoencoders so that the analysis notebook (Step 4) can be explored without re-running the computationally expensive training steps.
 
-### Step 1 — Preprocess (`run_preprocess_msl.py`)
+### `data/latent_spaces.nc`
 
-```bash
-#!/bin/bash
-#PBS -N run_preprocess_msl
-#PBS -A <PROJECT_CODE>
-#PBS -q develop
-#PBS -l select=1:ncpus=8:mem=96GB
-#PBS -l walltime=03:00:00
-#PBS -j oe
+A single NetCDF file (~6.5 MB) holding the encoder output arrays from every run. Each variable has shape `(n_time, 9, 45, 4)` — 9 latent latitude positions × 45 latent longitude positions × 4 feature maps — and carries its own time coordinate:
 
-cd $PBS_O_WORKDIR
-source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
-conda activate sam-autoencoder
-export HDF5_USE_FILE_LOCKING=FALSE
+| Variable | Time dimension | n_time | Description |
+|---|---|---|---|
+| `latent_annual` | `time_annual` | 516 | Full-year autoencoder, all monthly fields 1980–2022 |
+| `latent_DJF` | `time_DJF` | 129 | DJF seasonal autoencoder |
+| `latent_MAM` | `time_MAM` | 129 | MAM seasonal autoencoder |
+| `latent_JJA` | `time_JJA` | 129 | JJA seasonal autoencoder |
+| `latent_SON` | `time_SON` | 129 | SON seasonal autoencoder |
 
-python run_preprocess_msl.py
-```
-
-### Step 2 — PCA (`run_pca.py`)
-
-```bash
-#!/bin/bash
-#PBS -N run_pca
-#PBS -A <PROJECT_CODE>
-#PBS -q develop
-#PBS -l select=1:ncpus=8:mem=100GB
-#PBS -l walltime=01:00:00
-#PBS -j oe
-
-cd $PBS_O_WORKDIR
-source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
-conda activate sam-autoencoder
-export HDF5_USE_FILE_LOCKING=FALSE
-
-python run_pca.py
-```
-
-### Step 3a — Full-year autoencoder (`run_autoencoder.py`)
-
-```bash
-#!/bin/bash
-#PBS -N run_autoencoder
-#PBS -A <PROJECT_CODE>
-#PBS -q develop
-#PBS -l select=1:ncpus=4:mem=100GB
-#PBS -l walltime=6:00:00
-#PBS -j oe
-
-cd $PBS_O_WORKDIR
-source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
-conda activate sam-autoencoder
-export HDF5_USE_FILE_LOCKING=FALSE
-
-python run_autoencoder.py \
-    --tag        sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped \
-    --rounds     64 32 16 8 4 \
-    --coarsen    1 \
-    --epochs     50 \
-    --batch_size 16 \
-    --lr         1e-4 \
-    --patience   10
-```
-
-### Step 3b — Seasonal autoencoders (`run_seasonal_autoencoder.py`)
-
-Submit one job per season. Example for DJF (repeat for MAM, JJA, SON):
-
-```bash
-#!/bin/bash
-#PBS -N run_seasonal_DJF
-#PBS -A <PROJECT_CODE>
-#PBS -q develop
-#PBS -l select=1:ncpus=4:mem=100GB
-#PBS -l walltime=6:00:00
-#PBS -j oe
-
-cd $PBS_O_WORKDIR
-source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
-conda activate sam-autoencoder
-export HDF5_USE_FILE_LOCKING=FALSE
-
-SEASON=DJF
-python run_seasonal_autoencoder.py \
-    --tag        sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped_lintrend_${SEASON} \
-    --season     ${SEASON} \
-    --rounds     64 32 16 8 4 \
-    --coarsen    1 \
-    --epochs     50 \
-    --batch_size 16 \
-    --lr         1e-4 \
-    --patience   10
-```
-
-Save each script as a `.pbs` file and submit with `qsub <script>.pbs`.
-On SLURM-based systems, replace `#PBS` directives with their `#SBATCH` equivalents
-(`-N` → `--job-name`, `select=1:ncpus=N:mem=XGB` → `--ntasks=1 --cpus-per-task=N --mem=XGB`,
-`-l walltime` → `--time`).
+> **Complete dataset**: The full intermediate outputs (trained `.keras` models, standardised input arrays, reconstructed fields, and cluster labels) are too large to include here. If you would like access to the complete dataset, please contact the authors at maiaposternack@gmail.com or kirstinkoepnick@g.harvard.edu.
 
 ---
 
@@ -259,24 +165,6 @@ Pre-generated paper figures are included in the `figures/` directory for referen
 
 ## Computing Environment
 
-The scripts were developed and run on the NCAR Derecho supercomputer. The authors
-used a pre-existing conda environment named `my-npl-tensor`, located at
-`/glade/work/mposternack/conda-envs/my-npl-tensor`. An equivalent reproducible
-environment is provided via `environment.yml` (named `sam-autoencoder`).
-
-To recreate the environment:
-
-```bash
-conda env create -f environment.yml
-conda activate sam-autoencoder
-```
-
-Or with pip:
-
-```bash
-pip install -r requirements.txt
-```
-
 **Python version**: 3.12  
 **Key packages**: TensorFlow 2.18, Keras, NumPy 1.26, Xarray, Dask, scikit-learn,
-Matplotlib, Cartopy, SciPy
+Matplotlib, Cartopy, SciPy, Pandas, Distributed, h5netcdf, netCDF4

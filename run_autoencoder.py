@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
+
 In this file we train a convolutional autoencoder on the preprocessed SAM MSL anomolies and save all outputs / weights to be analyzed later. 
 
 Input
@@ -17,9 +19,7 @@ times_<tag>.npy                time coordinate array
 summary_<tag>.json             training metadata and performance summary
 
 We can run a pbs batch script or use the following commands.
-
 Our default settings are 64x32x16x8x4 compression, 1x coarsen, 50 epochs.
-
 We can run with `python run_autoencoder.py --tag <tag> --rounds <rounds> --coarsen <coarsen> --epochs <epochs> --batch_size <batch_size> --lr <lr> --patience <patience> --test_size <test_size> --save_dir <save_dir>`
 
 """
@@ -99,39 +99,20 @@ TEST_SIZE = args.test_size
 # start the timer
 t0 = time.time()
 
-print("  SAM MSL Autoencoder Training")
-print(f"  tag: {TAG}")
-print(f"  input file: {INPUT_FILE}")
-print(f"  save_dir: {SAVE_DIR}")
-print(f"  coarsen: {COARSEN}x")
-print(f"  lat bounds: {LAT_BOUNDS}")
-print(f"  rounds: {ROUNDS}")
-print(f"  pool size: {POOL_SIZE}")
-print(f"  conv size: {CONV_SIZE}")
-print(f"  epochs: {EPOCHS}  (patience={PATIENCE})")
-print(f"  batch size: {BATCH_SIZE}")
-print(f"  learning rate: {LR}")
-
 #load data
 msl_data = xr.open_dataset(INPUT_FILE, chunks={"time": 12})
-da = msl_data["removed_trend_and_climatology"]
+da = msl_data["removed_trend_and_climatology"] # this is the preprocessed data
 
 # crop to the latitude bounds if they are provided
 if LAT_BOUNDS is not None:
     lat0, lat1 = float(LAT_BOUNDS[0]), float(LAT_BOUNDS[1])
     lat_slice = slice(lat0, lat1) if float(da.latitude[0]) <= float(da.latitude[-1]) else slice(lat1, lat0)
     da = da.sel(latitude=lat_slice)
-    print(
-        f"  Cropped lat {min(lat0, lat1):.1f} to {max(lat0, lat1):.1f} "
-        f"→ lat range {float(da.latitude.min()):.1f} to {float(da.latitude.max()):.1f} "
-        f"({da.sizes.get('latitude', len(da.latitude))} lats)"
-    )
 
-# coarsen the data if the coarsen factor is greater than 1
+# coarsen the data if the coarsen factor is greater than 1. will make faster
 if COARSEN > 1:
     da = da.isel(latitude=slice(None, None, COARSEN),
                  longitude=slice(None, None, COARSEN))
-    print(f"  Coarsened {COARSEN}x → {da.shape}")
 
 # get the number of time, latitude, and longitude steps
 n_time = len(da.time)
@@ -146,8 +127,8 @@ chunk_size = 50
 for start in range(0, n_time, chunk_size):
     end = min(start + chunk_size, n_time)
     data_all[start:end] = np.asarray(da.isel(time=slice(start, end)).load().data)
-    print(f"    loaded time {start}–{end-1}")
 
+# save for future reference
 times = da.time.values
 lats_coarse = da.latitude.values
 lons_coarse = da.longitude.values
@@ -247,4 +228,4 @@ with open(os.path.join(SAVE_DIR, f"summary_{TAG}.json"), "w") as f:
 
 print(f"\n Saving to {SAVE_DIR}/  (tag={TAG})")
 print(f"\n Done in {(time.time()-t0)/60:.1f} min")
-print(f" Best val loss: {min(history.history['val_loss']):.4f}")
+print(f"Best val loss: {min(history.history['val_loss']):.4f}")
