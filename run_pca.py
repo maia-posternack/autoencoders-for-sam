@@ -17,13 +17,13 @@ sam_pca_data.nc  (written to OUT_DIR)
         variance_explained  Fraction of variance per mode  (mode,)
 """
 
-# imports
 import os
 import time
 import numpy as np
 import xarray as xr
 
 START_TIME = time.time()
+
 DATA_DIR = os.path.expandvars("/glade/derecho/scratch/$USER")
 INPUT_FILE = os.path.join(DATA_DIR, "sam_preprocessed_data.nc")
 OUTPUT_FILE = os.path.join(DATA_DIR, "sam_pca_data.nc")

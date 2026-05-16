@@ -22,10 +22,10 @@ Step 2: run_pca.py
 Step 3a: run_autoencoder.py
          Reads sam_preprocessed_data.nc → autoencoder_models/<TAG>.*
 
-Step 3b: run_seasonal_autoencoder.py  (run once per season)
+Step 3b: run_preprocess_and_autoencoder_per_season.py  (run once per season)
          Reads sam_preprocessed_data.nc → autoencoder_models/<SEASON_TAG>.*
 
-Step 4:  autoeoncder_analysis.ipynb
+Step 4:  figures_and_analysis.ipynb
          Takes outputs from Steps 2–3 and saves to figures/
 ```
 
@@ -101,7 +101,7 @@ Run once for each season, otherwise the same as the full-year autoencoder.
 
 ```bash
 for SEASON in DJF MAM JJA SON; do
-    python run_seasonal_autoencoder.py \
+    python run_preprocess_and_autoencoder_per_season.py \
         --tag        sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped_lintrend_${SEASON} \
         --season     ${SEASON} \
         --rounds     64 32 16 8 4 \
@@ -124,9 +124,9 @@ three sequential parts:
 
 | Part | Description | Key outputs |
 |---|---|---|
-| **Part 1** | Full-year autoencoder: reconstruction quality, elbow analysis, cluster visualisation | `figures/autoencoder_reconstruction.pdf`, `figures/elbow.pdf`, `figures/reconstruction_correlation.pdf` |
-| **Part 2** | Time series and comparison: SAM index construction, EOF comparison, Marshall AAO validation, bootstrap test | `figures/compare.pdf`, `figures/time.pdf`, `figures/corr.pdf`, `figures/bootstrap.pdf` |
-| **Part 3** | Seasonal autoencoders: per-season hierarchical clustering, composite maps | `figures/season_linkages.pdf`, `figures/DJF_clusters.pdf`, etc. |
+| **Part 1** | Full-year autoencoder: reconstruction quality, elbow analysis, cluster visualisation, transition probabilities, robustness evaluation | `figures/autoencoder_reconstruction.pdf`, `figures/elbow.pdf`, `figures/cluster_transition_probabilities.pdf`,  `figures/pca_elbow.pdf`, `figures/pca_composites.pdf` |
+| **Part 2** | Time series and comparison: SAM index construction, EOF comparison, Annular Analysis | `figures/corr_direct_clusters.pdf`, `figures/time_series.pdf` |
+| **Part 3** | Seasonal autoencoders: per-season hierarchical clustering, composite maps | `figures/season_linkages.pdf`, `figures/all_seasons_clusters.pdf`, etc. |
 
 Parts 1–3 must be run top-to-bottom in a single session; Part 2 uses `ds_ae` built in Part 1.
 
