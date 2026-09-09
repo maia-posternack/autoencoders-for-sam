@@ -16,8 +16,11 @@ The analysis proceeds in four steps. Each step produces output files consumed by
 Step 1: run_preprocess_msl.py
         Takes raw ERA5 MSL NetCDF files and saves to sam_preprocessed_data.nc
 
-Step 2: run_pca.py
-        Takes sam_preprocessed_data.nc and saves sam_pca_data.nc
+Step 2a: run_pca.py
+         Takes sam_preprocessed_data.nc and saves sam_pca_data.nc (leading 3 modes)
+
+Step 2b: run_pca_all.py
+         Same input, saves sam_pca_data_all.nc (every mode; the PC-clustering baseline)
 
 Step 3a: run_autoencoder.py
          Reads sam_preprocessed_data.nc → autoencoder_models/<TAG>.*
@@ -25,9 +28,17 @@ Step 3a: run_autoencoder.py
 Step 3b: run_preprocess_and_autoencoder_per_season.py  (run once per season)
          Reads sam_preprocessed_data.nc → autoencoder_models/<SEASON_TAG>.*
 
-Step 4:  figures_and_analysis.ipynb
-         Takes outputs from Steps 2–3 and saves to figures/
+Step 3c: run_seed_ensemble_era5.py  (10 initialisations + a 12-member latent sweep)
+         Reads sam_preprocessed_data.nc → autoencoder_models/era5_seed_ensemble/
+                                        → autoencoder_models/era5_latent_sweep/
+
+Step 4:  edits/paper_figures.ipynb
+         Takes outputs from Steps 2–3 and saves every published figure to
+         edits/paper_figures_out/{figs,final-figs}/
 ```
+
+Steps 1–3 are training and are expensive (Step 3c alone is ~9–10 h of wall time on
+Derecho). Step 4 is the whole figure set and takes about 25 minutes.
 
 ---
 
@@ -57,13 +68,17 @@ Removes the monthly climatology, per-pixel linear trend, and applies cosine weig
 ### Step 2 — Compute EOFs (PCA baseline)
 
 ```bash
-python run_pca.py
+python run_pca.py       # leading three modes  -> $SCRATCH/sam_pca_data.nc
+python run_pca_all.py   # every mode           -> $SCRATCH/sam_pca_data_all.nc
 ```
 
-Output: `$SCRATCH/sam_pca_data.nc`
-
 Computes EOFs of Southern Hemisphere (90°S–20°S) MSL anomalies
-using full SVD and saves the leading three modes.
+using full SVD. `run_pca.py` saves the leading three modes, which supply EOF1/PC1 to most
+figures; `run_pca_all.py` saves the full score matrix, which is what the
+principal-component clustering baseline (Figs S14, S15) is built from.
+
+A copy of `sam_pca_data.nc` is kept in `data/pca/` because it is small and slow to
+rebuild.
 
 **Hardware**: Requires ~100 GB RAM (~10 min). On NCAR Derecho, submit via PBS.
 
@@ -117,26 +132,95 @@ Outputs: same as Step 3a plus `climatology_<TAG>.nc` and `polyfit_coefs_<TAG>.nc
 
 ---
 
-### Step 4 — Run the analysis notebook
+### Step 3c — Train the initialisation ensemble and the latent sweep
 
-Open `figures_and_analysis.ipynb` and run it top-to-bottom. The notebook is organised in
-three sequential parts:
+The published classes are reported as an ensemble mean over ten random initialisations,
+so this step is required for most figures. `--split_seed 5` is pinned across all members:
+it fixes the train/test split so that the spread across members reflects initialisation
+and training order only.
 
-| Part | Description | Key outputs |
+```bash
+# Ten initialisations at the published latent size (Figs 2-7, S5, S9, S16)
+for SEED in 0 1 2 3 4 5 6 7 8 9; do
+    python run_seed_ensemble_era5.py \
+        --tag        sam_era5_autoencoder_seed${SEED} \
+        --seed       ${SEED} \
+        --split_seed 5 \
+        --rounds     64 32 16 8 4 \
+        --coarsen    1 --epochs 50 --batch_size 16 --lr 1e-4 --patience 10 \
+        --save_dir   $SCRATCH/autoencoder_models/era5_seed_ensemble
+done
+
+# Latent-dimension sweep: channels 1, 2, 8, 16 at seeds 0-2 (Fig S3).  Channels 4 is the
+# published configuration and is not retrained -- the sweep reuses the ensemble above.
+for CH in 1 2 8 16; do for SEED in 0 1 2; do
+    python run_seed_ensemble_era5.py \
+        --tag        sam_era5_latent${CH}ch_seed${SEED} \
+        --seed       ${SEED} \
+        --split_seed 5 \
+        --rounds     64 32 16 8 ${CH} \
+        --coarsen    1 --epochs 50 --batch_size 16 --lr 1e-4 --patience 10 \
+        --save_dir   $SCRATCH/autoencoder_models/era5_latent_sweep
+done; done
+```
+
+**Hardware**: ~2.6 h per member. On NCAR Derecho run them as a PBS job array — see
+`VARIATION A` and `VARIATION B` in `edits/run_paper_figures.pbs`, which carry the working
+queue configuration.
+
+---
+
+### Step 4 — Generate the figures
+
+`edits/paper_figures.ipynb` runs top-to-bottom and writes **every figure in the paper and
+the supplement**:
+
+```bash
+cd edits
+qsub run_paper_figures.pbs      # ~25 min; too heavy for a login node
+```
+
+Figures are written to `edits/paper_figures_out/figs/` and
+`edits/paper_figures_out/final-figs/`, mirroring the two paths the LaTeX sources use.
+The notebook is organised in eight parts, each loading one dataset once and then drawing
+every figure that needs it:
+
+| Part | Description | Figures |
 |---|---|---|
-| **Part 1** | Full-year autoencoder: reconstruction quality, elbow analysis, cluster visualisation, transition probabilities, robustness evaluation | `figures/autoencoder_reconstruction.pdf`, `figures/elbow.pdf`, `figures/cluster_transition_probabilities.pdf`,  `figures/pca_elbow.pdf`, `figures/pca_composites.pdf` |
-| **Part 2** | Time series and comparison: SAM index construction, EOF comparison, Annular Analysis | `figures/corr_direct_clusters.pdf`, `figures/time_series.pdf` |
-| **Part 3** | Seasonal autoencoders: per-season hierarchical clustering, composite maps | `figures/season_linkages.pdf`, `figures/all_seasons_clusters.pdf`, etc. |
+| 1 | The pipeline schematic — provenance note only, it is a hand-drawn diagram | 1 |
+| 2 | Published single autoencoder run: reconstruction, elbow diagnostics, PC-clustering baseline, seasonal composites | 8, S1, S4, S13, S14, S15 |
+| 3 | Ten-member initialisation ensemble: composites with consensus stippling, occupancy, transitions, non-annularity, PC-space structure, temporal evolution | 2, 3, 4, 5, 6, 7, S5, S9, S16 |
+| 4 | Occupancy-matched PC1 controls | S10, S11, S12 |
+| 5 | Composites on one common colour bar | S6 |
+| 6 | Transition statistics and shuffled-label nulls | S7, S8 |
+| 7 | Architecture and latent-size sensitivity | S2, S3 |
+| 8 | Verification — asserts all 23 PDFs exist and were written by that run | — |
 
-Parts 1–3 must be run top-to-bottom in a single session; Part 2 uses `ds_ae` built in Part 1.
+Figure 1 is the only exception: it is a hand-drawn schematic with no source code, and is
+carried over as a file.
 
-CHANGE LATER
+The notebook's own final cell is the source of truth for whether a run succeeded; the
+`.log` accumulates across runs and can show a stale traceback.
+
+`figures_and_analysis.ipynb` in the repository root is the original analysis notebook for
+the published single training run. It is kept for provenance — its cells for Figs 8, S1,
+S4, S13, S14 and S15 are carried into Step 4 — but it writes to `figures/` and does not
+cover the ensemble, so **use Step 4 for the published figure set**.
 
 ---
 
 ## Provided Data
 
 The `data/` directory contains pre-extracted latent-space representations from all five trained autoencoders so that the analysis notebook (Step 4) can be explored without re-running the computationally expensive training steps.
+
+It also holds the small artifacts that are slow or impossible to rebuild — see
+`data/README.md` for the full inventory:
+
+| path | contents |
+|---|---|
+| `pca/sam_pca_data.nc` | ERA5 EOF/PC solution, 516 months, from Step 2 |
+| `model_summaries/summary_*.json` | Training losses for the four tested architectures. These four files are the entire input to Fig S2. |
+| `figure_metrics/*.json` | Measured reconstruction errors and per-member latent-sweep diagnostics |
 
 ### `data/latent_spaces.nc`
 
@@ -159,12 +243,20 @@ A single NetCDF file (~6.5 MB) holding the encoder output arrays from every run.
 All intermediate files are written to `$SCRATCH` (`/glade/derecho/scratch/$USER` on NCAR Derecho). To write elsewhere, pass `--save_dir <path>` to the training
 scripts and update `SAVE_DIR` / `OUT_DIR` at the top of each file.
 
-Pre-generated paper figures are included in the `figures/` directory for reference.
+The published figures are in `edits/paper_figures_out/`. The `figures/` directory holds an
+earlier set from `figures_and_analysis.ipynb` and is superseded by it.
+
+**Note on `$SCRATCH`**: on Derecho it is purged periodically and is not backed up. The
+Step 3 outputs are ~20 GB; copy them somewhere durable if they are needed long term.
 
 ---
 
 ## Computing Environment
 
 **Python version**: 3.12  
-**Key packages**: TensorFlow 2.18, Keras, NumPy 1.26, Xarray, Dask, scikit-learn,
-Matplotlib, Cartopy, SciPy, Pandas, Distributed, h5netcdf, netCDF4
+**Key packages**: TensorFlow 2.19, Keras, NumPy 1.26, Xarray, Dask, scikit-learn 1.6,
+Matplotlib 3.10, Cartopy, SciPy, Pandas, Seaborn, Distributed, h5netcdf, netCDF4
+
+Training (Steps 1–3) and figure generation (Step 4) run in the same environment; see
+`environment.yml`. TensorFlow is required for Step 4 as well, because Fig S1 does a
+forward pass through the saved autoencoder.
