@@ -2,7 +2,7 @@
 
 **Authors**: Maia Posternack, Kirstin Koepnick  
 **Journal**: JGR: Machine Learning and Computation  
-**Code archive**: <!-- TODO: paste the Zenodo concept DOI here once the release is published -->
+**Code archive**: https://doi.org/10.5281/zenodo.22690306 
 
 This repository contains all scripts and notebooks required to reproduce the results presented in our paper. The analysis uses a convolutional autoencoder and hierarchical clustering pipeline trained on monthly ERA5 mean sea-level pressure (MSLP) data over the Southern Hemisphere (1980–2022) to reconstruct the Southern Annular Mode (SAM).
 
@@ -44,8 +44,7 @@ Derecho). Step 4 is the whole figure set and takes about 25 minutes.
 
 ## Input Data
 
-The preprocessing script reads ERA5 monthly mean sea-level pressure at 0.25°
-resolution from the NCAR Research Data Archive (RDA). Also available at the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).
+The preprocessing script reads ERA5 monthly mean sea-level pressure at 0.25° resolution from the NCAR Research Data Archive (RDA). Also available at the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).
 
 ---
 
@@ -72,13 +71,10 @@ python run_pca.py       # leading three modes  -> $SCRATCH/sam_pca_data.nc
 python run_pca_all.py   # every mode           -> $SCRATCH/sam_pca_data_all.nc
 ```
 
-Computes EOFs of Southern Hemisphere (90°S–20°S) MSL anomalies
-using full SVD. `run_pca.py` saves the leading three modes, which supply EOF1/PC1 to most
-figures; `run_pca_all.py` saves the full score matrix, which is what the
-principal-component clustering baseline (Figs S14, S15) is built from.
+Computes EOFs of Southern Hemisphere (90°S–20°S) MSL anomalies using full SVD. `run_pca.py` saves the leading three modes, which supply EOF1/PC1 to most
+figures; `run_pca_all.py` saves the full score matrix, which is what the principal-component clustering baseline (Figs S14, S15) is built from.
 
-A copy of `sam_pca_data.nc` is kept in `data/pca/` because it is small and slow to
-rebuild.
+A copy of `sam_pca_data.nc` is kept in `data/pca/` because it is small and slow to rebuild.
 
 **Hardware**: Requires ~100 GB RAM (~10 min). On NCAR Derecho, submit via PBS.
 
@@ -86,8 +82,7 @@ rebuild.
 
 ### Step 3a — Train the full-year autoencoder
 
-The settings below reproduce the model used in the paper (~250x compression,
-full 0.25° resolution, 5-stage encoder):
+The settings below reproduce the model used in the paper (~250x compression, full 0.25° resolution, 5-stage encoder):
 
 ```bash
 python run_autoencoder.py \
@@ -134,9 +129,7 @@ Outputs: same as Step 3a plus `climatology_<TAG>.nc` and `polyfit_coefs_<TAG>.nc
 
 ### Step 3c — Train the initialisation ensemble and the latent sweep
 
-The published classes are reported as an ensemble mean over ten random initialisations,
-so this step is required for most figures. `--split_seed 5` is pinned across all members:
-it fixes the train/test split so that the spread across members reflects initialisation
+The published classes are reported as an ensemble mean over ten random initialisations, so this step is required for most figures. `--split_seed 5` is pinned across all members: it fixes the train/test split so that the spread across members reflects initialisation
 and training order only.
 
 ```bash
@@ -172,16 +165,14 @@ queue configuration.
 
 ### Step 4 — Generate the figures
 
-`edits/paper_figures.ipynb` runs top-to-bottom and writes **every figure in the paper and
-the supplement**:
+`edits/paper_figures.ipynb` runs top-to-bottom and writes **every figure in the paper andthe supplement**:
 
 ```bash
 cd edits
 qsub run_paper_figures.pbs      # ~25 min; too heavy for a login node
 ```
 
-Figures are written to `edits/paper_figures_out/figs/` and
-`edits/paper_figures_out/final-figs/`, mirroring the two paths the LaTeX sources use. We suggest running this on the develop queue (it takes 20-30 minutes). 
+Figures are written to `edits/paper_figures_out/figs/` and `edits/paper_figures_out/final-figs/`, mirroring the two paths the LaTeX sources use. We suggest running this on the develop queue (it takes 20-30 minutes). 
 
 `figures_and_analysis.ipynb` focuses only on figures from the first draft of this paper (a one-off run as opposed to an ensemble) 
 
@@ -191,8 +182,7 @@ Figures are written to `edits/paper_figures_out/figs/` and
 
 The `data/` directory contains pre-extracted latent-space representations from all five trained autoencoders so that the analysis notebook (Step 4) can be explored without re-running the computationally expensive training steps.
 
-It also holds the small artifacts that are slow or impossible to rebuild — see
-`data/README.md` for the full inventory:
+It also holds the small artifacts that are slow or impossible to rebuild — see `data/README.md` for the full inventory:
 
 | path | contents |
 |---|---|
@@ -225,11 +215,8 @@ The published figures are in `edits/paper_figures_out/`. The `figures/` director
 earlier set from `figures_and_analysis.ipynb` and is superseded by `edits/paper_figures_out/`.
 
 **Note on `$SCRATCH`**: on Derecho it is purged periodically and is not backed up. The
-Step 3 outputs the figures depend on are ~20 GB (29 GB for the whole
-`autoencoder_models/` directory), so copy them somewhere durable if they are needed long
-term. Ours are archived at
-`/glade/campaign/univ/uhar0025/mposternack/sam_archive/` — see `data/README.md` for the
-layout and for which files each figure needs.
+Step 3 outputs the figures depend on are ~20 GB (29 GB for the whole `autoencoder_models/` directory), so copy them somewhere durable if they are needed long
+term. Ours are archived at `/glade/campaign/univ/uhar0025/mposternack/sam_archive/` — see `data/README.md` for the layout and for which files each figure needs.
 
 ---
 
