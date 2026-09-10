@@ -1,0 +1,14 @@
+{
+  "tag": "sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped",
+  "n_samples": 516,
+  "n_values": 208794240,
+  "note": "Forward pass of autoencoder_<tag>.keras over data_standardized_<tag>.npy. MAE is the quantity run_autoencoder.py optimised (loss='mean_absolute_error'); MSE is reported only for comparison and was never used for training. Units are standardized, sqrt(cos(lat))-weighted MSL anomaly.",
+  "mae_all": 0.24114425108595736,
+  "mse_all": 0.22480401028751418,
+  "mae_train": 0.23982563135476975,
+  "mse_train": 0.2207583534991599,
+  "mae_test": 0.24636801386720045,
+  "mse_test": 0.24083103525676391,
+  "n_train": 412,
+  "n_test": 104
+}

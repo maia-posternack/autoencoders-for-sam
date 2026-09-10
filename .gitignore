@@ -19,9 +19,6 @@ __pycache__/
 *.nc
 *.npy
 
-# Keep the pre-extracted latent spaces in the data/ folder
-!data/latent_spaces.nc
-
 # Keras / model output
 *.keras
 *.h5
@@ -30,3 +27,17 @@ __pycache__/
 
 # Scratch / intermediate directories
 autoencoder_models/
+
+# ---------------------------------------------------------------------------
+# Exceptions: small, hard-to-regenerate artifacts that ship with the code.
+# These must stay below the patterns above -- in .gitignore a negation only
+# takes effect if it appears after the rule that would exclude the file.
+# See data/README.md for what each one is and which figures need it.
+# ---------------------------------------------------------------------------
+!data/latent_spaces.nc
+!data/pca/sam_pca_data.nc
+!data/model_summaries/*.json
+!data/figure_metrics/*.json
+
+# The PBS submission script the README tells you to qsub
+!edits/run_paper_figures.pbs

@@ -1,0 +1,198 @@
+#!/bin/bash
+# =============================================================================
+#  The only PBS script this repository needs.
+#
+#  LIVE JOB (below): execute edits/paper_figures.ipynb, which regenerates every
+#  figure cited by submission-2/main-B.tex and submission-2/supplemental-B.tex.
+#
+#      qsub run_paper_figures.pbs
+#
+#  The two blocks at the bottom, VARIATION A and VARIATION B, are the training
+#  submits that produced the models the notebook reads.  They are commented out
+#  because those models already exist on scratch; uncomment one into its own
+#  file only if the ensemble has to be retrained from scratch.  Together the
+#  three blocks are the whole pipeline.
+# =============================================================================
+#PBS -N paper_figures
+#PBS -A UHAR0025
+#PBS -q develop
+#PBS -l select=1:ncpus=8:mem=120GB
+#PBS -l walltime=03:00:00
+#PBS -j oe
+#PBS -o /glade/u/home/mposternack/autoencoders_for_sam/edits/run_paper_figures.log
+
+# Measured: 20-25 min, 9.7 GB peak.
+#
+# Not a login-node job.  Part 2 loads the four seasonal CAE runs, Part 3 holds one
+# 0.83 GB de-weighted field for ten members and bootstraps significance maps on
+# the native 281 x 1440 grid, and Part 7 clusters 22 latent-sweep members.
+#
+# Queue: `develop` routes to cpudev and places jobs pack:shared, so it starts in
+# under a minute.  The `main` queue wants a whole exclusive node and a request
+# this size has sat behind thousands of jobs.  cpudev caps walltime at 6 h.
+#
+# Environment: the TensorFlow env, not npl-2024a.  Figure S1 does a forward pass
+# through the saved autoencoder and npl-2024a has no TensorFlow.  This env also
+# carries cartopy, seaborn, sklearn and xarray, so one kernel covers the whole
+# notebook, and it is matplotlib 3.10.0 -- what rendered the submitted figs/*.pdf.
+#
+# PF_OUT_DIR overrides the output tree (default edits/paper_figures_out).
+
+cd /glade/u/home/mposternack/autoencoders_for_sam/edits
+
+source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+
+export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS=8
+export MKL_NUM_THREADS=8
+export TF_NUM_INTRAOP_THREADS=8
+export TF_NUM_INTEROP_THREADS=1
+export TF_CPP_MIN_LOG_LEVEL=2
+export TF_ENABLE_ONEDNN_OPTS=0
+
+echo "===================================================="
+echo "PBS job ID : ${PBS_JOBID}"
+echo "Host       : $(hostname)"
+echo "Start      : $(date)"
+echo "Output dir : ${PF_OUT_DIR:-edits/paper_figures_out}"
+echo "===================================================="
+
+jupyter nbconvert --to notebook --execute \
+    --ExecutePreprocessor.kernel_name=python3 \
+    --ExecutePreprocessor.timeout=9000 \
+    --inplace paper_figures.ipynb
+
+status=$?
+echo "===================================================="
+echo "nbconvert exit status: ${status}"
+echo "End: $(date)"
+echo "===================================================="
+exit ${status}
+
+# =============================================================================
+#  VARIATION A -- train the ten-member ERA5 initialisation ensemble
+#  (produced scratch/autoencoder_models/era5_seed_ensemble, read by Part 3)
+#
+#  Was submit_era5_seeds.pbs.  ~2.6 h per member, ~9-10 h wall for all ten.
+#
+#  Queue design, measured 2026-08-26: `develop` with `-J 0-9%4` and
+#  ncpus=64.  Buying sole tenancy with the *core* request is the trick -- two
+#  64-cpu members exactly fill a 128-core node so no foreign job can land on it,
+#  while only 4 threads are actually active.  CPU training here is
+#  memory-bandwidth bound, so co-location costs far more than core count
+#  suggests (4 jobs sharing a node ran 2.8x slower than 1).  `%4` is set by
+#  max_run_res.ncpus = 256 on cpudev.  `place=excl` is rejected on develop, and
+#  `main` gives whole exclusive nodes so ten 4-cpu members asked for ten
+#  128-core nodes and never started.  Do not raise the thread counts past 4
+#  without re-verifying bitwise determinism.
+#
+#  --split_seed 5 is load-bearing: it pins the train/test split so the spread
+#  across members is initialisation + minibatch-shuffle variance only.  The
+#  script's own default would vary the split too, adding a third source.
+# -----------------------------------------------------------------------------
+# #PBS -N sam_era5_seeds
+# #PBS -A UHAR0025
+# #PBS -q develop
+# #PBS -J 0-9%4
+# #PBS -l select=1:ncpus=64:mem=100GB
+# #PBS -l walltime=06:00:00
+# #PBS -j oe
+#
+# WORK_DIR=/glade/u/home/mposternack/autoencoders_for_sam
+# LOG_DIR=${WORK_DIR}/logs
+# INPUT_FILE=/glade/derecho/scratch/mposternack/sam_preprocessed_data.nc
+# SAVE_DIR=/glade/derecho/scratch/mposternack/autoencoder_models/era5_seed_ensemble
+# SEED=${PBS_ARRAY_INDEX}
+#
+# mkdir -p "${LOG_DIR}" "${SAVE_DIR}"
+# cd "${WORK_DIR}"
+# exec > "${LOG_DIR}/era5_seed${SEED}_${PBS_JOBID}.log" 2>&1
+#
+# source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+# conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+#
+# export PYTHONUNBUFFERED=1
+# export PYTHONFAULTHANDLER=1
+# export OMP_NUM_THREADS=4
+# export OPENBLAS_NUM_THREADS=4
+# export MKL_NUM_THREADS=4
+# export NUMEXPR_NUM_THREADS=4
+# export TF_NUM_INTRAOP_THREADS=4
+# export TF_NUM_INTEROP_THREADS=1
+# export TF_ENABLE_ONEDNN_OPTS=0
+# export TF_CPP_MIN_LOG_LEVEL=2
+#
+# python -u run_seed_ensemble_era5.py \
+#     --tag "sam_era5_autoencoder_seed${SEED}" \
+#     --seed "${SEED}" \
+#     --split_seed 5 \
+#     --input_file "${INPUT_FILE}" \
+#     --rounds 64 32 16 8 4 \
+#     --coarsen 1 \
+#     --epochs 50 \
+#     --batch_size 16 \
+#     --lr 1e-4 \
+#     --patience 10 \
+#     --save_dir "${SAVE_DIR}"
+
+# =============================================================================
+#  VARIATION B -- train the latent-dimension sweep
+#  (produced scratch/autoencoder_models/era5_latent_sweep, read by Part 7 / Fig S3)
+#
+#  Was submit_latent_sweep.pbs.  Same queue design as VARIATION A.  Twelve
+#  members: latent channels 1, 2, 8, 16 at seeds 0, 1, 2.  Channels 4 is the
+#  published configuration and is NOT retrained here -- Part 7 takes its c=4 arm
+#  straight from the seed ensemble above, which is what makes the sweep a
+#  controlled comparison (identical input, identical --split_seed 5).
+# -----------------------------------------------------------------------------
+# #PBS -N sam_latent_sweep
+# #PBS -A UHAR0025
+# #PBS -q develop
+# #PBS -J 0-11%4
+# #PBS -l select=1:ncpus=64:mem=100GB
+# #PBS -l walltime=06:00:00
+# #PBS -j oe
+#
+# WORK_DIR=/glade/u/home/mposternack/autoencoders_for_sam
+# LOG_DIR=${WORK_DIR}/logs
+# INPUT_FILE=/glade/derecho/scratch/mposternack/sam_preprocessed_data.nc
+# SAVE_DIR=/glade/derecho/scratch/mposternack/autoencoder_models/era5_latent_sweep
+#
+# CH_LIST=(1 2 8 16  1 2 8 16  1 2 8 16)
+# SD_LIST=(0 0 0 0   1 1 1 1   2 2 2 2)
+# IDX=${PBS_ARRAY_INDEX}
+# CHANNELS=${CH_LIST[$IDX]}
+# SEED=${SD_LIST[$IDX]}
+# TAG="sam_era5_latent${CHANNELS}ch_seed${SEED}"
+#
+# mkdir -p "${LOG_DIR}" "${SAVE_DIR}"
+# cd "${WORK_DIR}"
+# exec > "${LOG_DIR}/latent_sweep_${CHANNELS}ch_seed${SEED}_${PBS_JOBID}.log" 2>&1
+#
+# source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+# conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+#
+# export PYTHONUNBUFFERED=1
+# export PYTHONFAULTHANDLER=1
+# export OMP_NUM_THREADS=4
+# export OPENBLAS_NUM_THREADS=4
+# export MKL_NUM_THREADS=4
+# export NUMEXPR_NUM_THREADS=4
+# export TF_NUM_INTRAOP_THREADS=4
+# export TF_NUM_INTEROP_THREADS=1
+# export TF_ENABLE_ONEDNN_OPTS=0
+# export TF_CPP_MIN_LOG_LEVEL=2
+#
+# python -u run_seed_ensemble_era5.py \
+#     --tag "${TAG}" \
+#     --seed "${SEED}" \
+#     --split_seed 5 \
+#     --input_file "${INPUT_FILE}" \
+#     --rounds 64 32 16 8 "${CHANNELS}" \
+#     --coarsen 1 \
+#     --epochs 50 \
+#     --batch_size 16 \
+#     --lr 1e-4 \
+#     --patience 10 \
+#     --save_dir "${SAVE_DIR}"

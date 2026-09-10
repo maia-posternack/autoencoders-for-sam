@@ -17,17 +17,42 @@ Here you can find small, hard-to-regenerate artifacts kept alongside the code!
 unchanged, which is how it was verified. The copies here exist because scratch is purged
 and is not backed up.
 
-## Bulk inputs, left on scratch (20.6 GB)
+## Bulk inputs
 
-All under `/glade/derecho/scratch/mposternack/`:
+Too large to track in git. The figure notebook reads them from
+`/glade/derecho/scratch/mposternack/`, which is **purged periodically and not backed up**,
+so as of 2026-09-10 everything is also archived on campaign storage (see below).
 
-| path | size | used by |
+| path, relative to `autoencoder_models/` unless noted | size | used by |
 |---|---|---|
-| `autoencoder_models/{autoencoder,encoder}_sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped.keras` + its `{encoded_all,data_standardized,lats,lons,times}_*.npy` | 0.8 G | Parts 2, 4, 5, 6 (Figs S1, S4, S15, S14, S7, S8, S6, S10-S12) |
-| `autoencoder_models/*_lintrend_{DJF,MAM,JJA,SON}.*` | 0.8 G | Part 2 (Figs S13, 8) |
-| `autoencoder_models/era5_seed_ensemble/` | 7.9 G | Part 3 (Figs 2, 3, 4, 5, 6, 7, S5, S9, S16) |
-| `autoencoder_models/era5_latent_sweep/` | 9.5 G | Part 7 (Fig S3) |
-| `sam_pca_data_all.nc` | 1.6 G | Part 2 (Figs S15, S14) — all PC modes, not just the leading three |
-| `sam_preprocessed_data.nc` | - | training input only; not read by the figure notebook |
+| `{autoencoder,encoder}_sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped.keras` + its `{encoded_all,data_standardized,lats,lons,times}_*.npy` | 0.8 G | Parts 2, 4, 5, 6 (Figs S1, S4, S15, S14, S7, S8, S6, S10-S12) |
+| `*_lintrend_{DJF,MAM,JJA,SON}.*` | 0.8 G | Part 2 (Figs S13, 8) |
+| `era5_seed_ensemble/` | 7.9 G | Part 3 (Figs 2, 3, 4, 5, 6, 7, S5, S9, S16) |
+| `era5_latent_sweep/` | 9.5 G | Part 7 (Fig S3) |
+| `sam_pca_data_all.nc` (scratch root) | 1.6 G | Part 2 (Figs S15, S14) — all PC modes, not just the leading three |
+| `sam_preprocessed_data.nc` (scratch root) | 3.0 G | training input only; not read by the figure notebook |
 
-**Scratch is purged and not backed up.** If these matter beyond the resubmission, copy them to `/glade/campaign/univ/uhar0025/`. A snapshot of the code and figures as of 2026-09-09 is already at `/glade/campaign/univ/uhar0025/mposternack/sam_archive/edits_pre_prune_20260909.tar.gz`.
+The four rows above total the 20.6 GB the figures actually need. The full
+`autoencoder_models/` directory is 29 G, because it also holds earlier architectures
+(`sam_ae`, `sam_ae_8x`, `sam_ae_50x`, `1x_32_16_8`, `1x_64_32_16_8`, `1x_64_32_16_8_4_2_1`)
+that no published figure reads. Their `data_standardized_*.npy` files are 2.0 G apiece and
+are regenerable from `sam_preprocessed_data.nc` if space is ever needed.
+
+## Durable archive
+
+Copied 2026-09-10, verified by file count and by md5 on the paper-critical models:
+
+```
+/glade/campaign/univ/uhar0025/mposternack/sam_archive/
+├── autoencoder_models/               29 G, 384 files   full copy of the scratch directory
+├── netcdf/                          6.0 G, 8 files     every .nc from the scratch root
+└── edits_pre_prune_20260909.tar.gz  304 M              code + figures snapshot, 2026-09-09
+```
+
+`netcdf/` holds `sam_pca_data_all.nc` and `sam_preprocessed_data.nc` from the table above,
+plus `sam_pca_data.nc`, `sam_preprocessed_wind.nc`, `global_pca_data.nc`,
+`sam_eof_analysis.nc`, `ae_cluster_data.nc` and `ae_cluster_ridge_data.nc`.
+
+Note that campaign paths are readable only by the `uhar0025` group on NCAR systems; they
+are a backup, not a distribution channel. For outside requests see the contact note in the
+top-level `README.md`.

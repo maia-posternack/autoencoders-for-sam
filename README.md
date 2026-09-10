@@ -1,10 +1,10 @@
-# Code for: Identifying Regime Structure of the Southern Annular Mode using Clustering Autoencoder Techniques (change later_)
+# Code for: Identifying Regime Structure of the Southern Annular Mode using Clustering Autoencoder Techniques
 
 **Authors**: Maia Posternack, Kirstin Koepnick  
 **Journal**: JGR: Machine Learning and Computation  
-**Code archive**: 
+**Code archive**: <!-- TODO: paste the Zenodo concept DOI here once the release is published -->
 
-This repository contains all scripts and notebooks required to reproduce the results presented in our paper. The analysis uses a convolutional autoencoder and hierarchal clustering pipeline trained on  monthly ERA5 mean sea-level pressure (MSLP) data over the Southern Hemisphere (1980–2022) to reconstruct the Southern Annular Mode (SAM)
+This repository contains all scripts and notebooks required to reproduce the results presented in our paper. The analysis uses a convolutional autoencoder and hierarchical clustering pipeline trained on monthly ERA5 mean sea-level pressure (MSLP) data over the Southern Hemisphere (1980–2022) to reconstruct the Southern Annular Mode (SAM).
 
 ---
 
@@ -45,7 +45,7 @@ Derecho). Step 4 is the whole figure set and takes about 25 minutes.
 ## Input Data
 
 The preprocessing script reads ERA5 monthly mean sea-level pressure at 0.25°
-resolution from the NCAR Research Data Archive (RDA). Also availabble at the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).
+resolution from the NCAR Research Data Archive (RDA). Also available at the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).
 
 ---
 
@@ -151,7 +151,7 @@ for SEED in 0 1 2 3 4 5 6 7 8 9; do
         --save_dir   $SCRATCH/autoencoder_models/era5_seed_ensemble
 done
 
-# Latent-dimension sweep: channels 1, 2, 8, 16 at seeds 0-2 (Fig S3).  Channels 4 is the
+# Latent-dimension sweep: channels 1, 2, 8, 16 at seeds 0-2 (Fig S3).  4 channels is the
 # published configuration and is not retrained -- the sweep reuses the ensemble above.
 for CH in 1 2 8 16; do for SEED in 0 1 2; do
     python run_seed_ensemble_era5.py \
@@ -222,10 +222,14 @@ All intermediate files are written to `$SCRATCH` (`/glade/derecho/scratch/$USER`
 scripts and update `SAVE_DIR` / `OUT_DIR` at the top of each file.
 
 The published figures are in `edits/paper_figures_out/`. The `figures/` directory holds an
-earlier set from `figures_and_analysis.ipynb` and is superseded by it.
+earlier set from `figures_and_analysis.ipynb` and is superseded by `edits/paper_figures_out/`.
 
 **Note on `$SCRATCH`**: on Derecho it is purged periodically and is not backed up. The
-Step 3 outputs are ~20 GB; copy them somewhere durable if they are needed long term.
+Step 3 outputs the figures depend on are ~20 GB (29 GB for the whole
+`autoencoder_models/` directory), so copy them somewhere durable if they are needed long
+term. Ours are archived at
+`/glade/campaign/univ/uhar0025/mposternack/sam_archive/` — see `data/README.md` for the
+layout and for which files each figure needs.
 
 ---
 

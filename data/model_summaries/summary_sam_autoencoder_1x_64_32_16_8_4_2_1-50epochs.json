@@ -1,0 +1,31 @@
+{
+  "tag": "sam_autoencoder_1x_64_32_16_8_4_2_1-50epochs",
+  "input_shape": [
+    721,
+    1440,
+    1
+  ],
+  "latent_shape": [
+    6,
+    12,
+    1
+  ],
+  "compression": 14420.0,
+  "epochs_run": 50,
+  "initial_loss": 0.6636,
+  "final_loss": 0.5125,
+  "best_val_loss": 0.5156,
+  "coarsen": 1,
+  "rounds": [
+    64,
+    32,
+    16,
+    8,
+    4,
+    2,
+    1
+  ],
+  "batch_size": 16,
+  "lr": 0.0001,
+  "wall_seconds": 24656.4
+}
