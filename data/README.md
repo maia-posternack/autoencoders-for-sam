@@ -1,11 +1,6 @@
 # `data/`
 
-Small, hard-to-regenerate artifacts kept alongside the code. Everything here is a few
-megabytes; the bulk inputs stay on scratch and are listed at the bottom.
-
-Note that `.gitignore` excludes `*.nc`, `*.npy`, `*.keras` and `*.json`, with a single
-exception for `data/latent_spaces.nc`, so most of this directory is deliberately
-untracked. It is an archive, not a git payload.
+Here you can find small, hard-to-regenerate artifacts kept alongside the code!
 
 ## Contents
 
@@ -35,7 +30,4 @@ All under `/glade/derecho/scratch/mposternack/`:
 | `sam_pca_data_all.nc` | 1.6 G | Part 2 (Figs S15, S14) — all PC modes, not just the leading three |
 | `sam_preprocessed_data.nc` | - | training input only; not read by the figure notebook |
 
-**Scratch is purged and not backed up.** If these matter beyond the resubmission, copy
-them to `/glade/campaign/univ/uhar0025/`. A snapshot of the code and figures as of
-2026-09-09 is already at
-`/glade/campaign/univ/uhar0025/mposternack/sam_archive/edits_pre_prune_20260909.tar.gz`.
+**Scratch is purged and not backed up.** If these matter beyond the resubmission, copy them to `/glade/campaign/univ/uhar0025/`. A snapshot of the code and figures as of 2026-09-09 is already at `/glade/campaign/univ/uhar0025/mposternack/sam_archive/edits_pre_prune_20260909.tar.gz`.

@@ -181,31 +181,9 @@ qsub run_paper_figures.pbs      # ~25 min; too heavy for a login node
 ```
 
 Figures are written to `edits/paper_figures_out/figs/` and
-`edits/paper_figures_out/final-figs/`, mirroring the two paths the LaTeX sources use.
-The notebook is organised in eight parts, each loading one dataset once and then drawing
-every figure that needs it:
+`edits/paper_figures_out/final-figs/`, mirroring the two paths the LaTeX sources use. We suggest running this on the develop queue (it takes 20-30 minutes). 
 
-| Part | Description | Figures |
-|---|---|---|
-| 1 | The pipeline schematic — provenance note only, it is a hand-drawn diagram | 1 |
-| 2 | Published single autoencoder run: reconstruction, elbow diagnostics, PC-clustering baseline, seasonal composites | 8, S1, S4, S13, S14, S15 |
-| 3 | Ten-member initialisation ensemble: composites with consensus stippling, occupancy, transitions, non-annularity, PC-space structure, temporal evolution | 2, 3, 4, 5, 6, 7, S5, S9, S16 |
-| 4 | Occupancy-matched PC1 controls | S10, S11, S12 |
-| 5 | Composites on one common colour bar | S6 |
-| 6 | Transition statistics and shuffled-label nulls | S7, S8 |
-| 7 | Architecture and latent-size sensitivity | S2, S3 |
-| 8 | Verification — asserts all 23 PDFs exist and were written by that run | — |
-
-Figure 1 is the only exception: it is a hand-drawn schematic with no source code, and is
-carried over as a file.
-
-The notebook's own final cell is the source of truth for whether a run succeeded; the
-`.log` accumulates across runs and can show a stale traceback.
-
-`figures_and_analysis.ipynb` in the repository root is the original analysis notebook for
-the published single training run. It is kept for provenance — its cells for Figs 8, S1,
-S4, S13, S14 and S15 are carried into Step 4 — but it writes to `figures/` and does not
-cover the ensemble, so **use Step 4 for the published figure set**.
+`figures_and_analysis.ipynb` focuses only on figures from the first draft of this paper (a one-off run as opposed to an ensemble) 
 
 ---
 
@@ -260,3 +238,5 @@ Matplotlib 3.10, Cartopy, SciPy, Pandas, Seaborn, Distributed, h5netcdf, netCDF4
 Training (Steps 1–3) and figure generation (Step 4) run in the same environment; see
 `environment.yml`. TensorFlow is required for Step 4 as well, because Fig S1 does a
 forward pass through the saved autoencoder.
+
+We hope you enjoy exploring!
