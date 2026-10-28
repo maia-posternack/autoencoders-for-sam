@@ -2,118 +2,60 @@
 """
 Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
 
-In this file we find the SAM using EOF analysis. We will use this as a baseline for future analysis. 
+In this file we find the SAM using EOF analysis of Southern Hemisphere (90S-20S) MSL anomalies.
+We will use this as a baseline for future analysis.
 
-Our input data is cosine-weighted so we undo this at the end of our process. 
+Our input data is cosine-weighted so we undo this on the EOFs at the end.
 
 Input
-sam_preprocessed_data.nc  (from run_preprocess_msl.py, read from OUT_DIR)
+$SCRATCH/sam_preprocessed_data.nc  (from run_preprocess_msl.py)
 
 Output
-sam_pca_data.nc  (written to OUT_DIR)
-    Variables:
-        eofs                EOF spatial patterns  (mode, latitude, longitude)
-        pcs                 Principal component time series  (time, mode)
-        variance_explained  Fraction of variance per mode  (mode,)
+$SCRATCH/sam_pca_data_all.nc  every mode (516); the PC-clustering baseline, Figs S13 and S14
+$SCRATCH/sam_pca_data.nc      the leading three modes; EOF1/PC1 for everything else
+    eofs                EOF patterns, unit variance, physical (unweighted) space  (mode, latitude, longitude)
+    pcs                 principal components, carrying the amplitude  (time, mode)
+    variance_explained  fraction of variance per mode  (mode,)
 """
-
 import os
 import time
 import numpy as np
 import xarray as xr
 
-START_TIME = time.time()
-
 DATA_DIR = os.path.expandvars("/glade/derecho/scratch/$USER")
-INPUT_FILE = os.path.join(DATA_DIR, "sam_preprocessed_data.nc")
-OUTPUT_FILE = os.path.join(DATA_DIR, "sam_pca_data.nc")
-
-N_MODES = 3 # we will use this as a baseline for future analysis. can be changed to anything!
+INPUT_FILE = f"{DATA_DIR}/sam_preprocessed_data.nc"
+N_LEADING = 3
 LAT_BOUNDS = (-90, -20)
 
-# load the preprocessed SAM MSL anomalies (already cosine-weighted by run_preprocess_msl.py)
+t0 = time.time()
 data = xr.open_dataset(INPUT_FILE, chunks={"time": 12})["removed_trend_and_climatology"]
-# select the southern hemisphere
-data_sh = data.sel(latitude=slice(LAT_BOUNDS[0], LAT_BOUNDS[1])).compute()
+data = data.sel(latitude=slice(*LAT_BOUNDS)).compute()
+nt, nlat, nlon = data.shape
 
-data_2d = data_sh.values.reshape(len(data_sh.time), len(data_sh.latitude) * len(data_sh.longitude))
-data_centered = data_2d - data_2d.mean(axis=0) # center the data
+X = data.values.reshape(nt, -1)
+X = X - X.mean(axis=0)
+U, S, Vt = np.linalg.svd(X, full_matrices=False)
+variance_explained = S ** 2 / np.sum(X ** 2)
+pcs = U * S
 
-# run the SVD
-U, S, Vt = np.linalg.svd(data_centered, full_matrices=False)
-U = U[:, :N_MODES]
-S = S[:N_MODES]
-Vt = Vt[:N_MODES, :]
+# remove the cosine weights from the EOFs, then give them unit variance and let the PCs carry the magnitude
+cos = np.cos(np.deg2rad(data.latitude.values))
+eofs = Vt.reshape(-1, nlat, nlon) / np.sqrt(cos / cos.mean())[None, :, None]
+eof_std = np.nanstd(eofs, axis=(1, 2))
+eofs /= eof_std[:, None, None]
+pcs *= eof_std
 
-# calculate the variance explained based on magnitude of S
-variance_explained = (S ** 2) / np.sum(data_centered ** 2)
-
-eofs_reshaped = Vt.reshape(N_MODES, len(data_sh.latitude), len(data_sh.longitude))
-pcs = U * S[np.newaxis, :]
-
-# Remove cosine weights from the EOFs
-cos_weights = np.cos(np.deg2rad(data_sh.latitude.values))
-cos_weights = cos_weights / cos_weights.mean()
-eofs_reshaped = eofs_reshaped / np.sqrt(cos_weights)[np.newaxis, :, np.newaxis]
-
-# Normalise so EOFs have unit variance; PCs absorb the magnitude
-for i in range(N_MODES):
-    eof_std = np.nanstd(eofs_reshaped[i])
-    eofs_reshaped[i] = eofs_reshaped[i] / eof_std
-    pcs[:, i] = pcs[:, i] * eof_std
-
-# saving dataset
-ds_out = xr.Dataset(
+modes = np.arange(1, len(S) + 1)
+ds = xr.Dataset(
     {
-        "eofs": xr.DataArray(
-            eofs_reshaped,
-            dims=["mode", "latitude", "longitude"],
-            coords={
-                "mode": np.arange(1, N_MODES + 1),
-                "latitude": data_sh.latitude, # latitude coordinates
-                "longitude": data_sh.longitude,
-            },
-            attrs={
-                "long_name": "Empirical Orthogonal Functions",
-                "description": "EOF patterns of MSL variability in physical (unweighted) space; cosine weights divided out after SVD",
-                "units": "normalized",
-            },
-        ),
-        "pcs": xr.DataArray(
-            pcs,
-            dims=["time", "mode"],
-            coords={
-                "time": data_sh.time,
-                "mode": np.arange(1, N_MODES + 1),
-            },
-            attrs={
-                "long_name": "Principal Components",
-                "description": "Time series of EOF amplitudes",
-                "units": "standardized",
-            },
-        ),
-        "variance_explained": xr.DataArray(
-            variance_explained,
-            dims=["mode"],
-            coords={"mode": np.arange(1, N_MODES + 1)},
-            attrs={
-                "long_name": "Variance Explained",
-                "description": "Fraction of total variance explained by each mode",
-                "units": "fraction",
-            },
-        ),
+        "eofs": (("mode", "latitude", "longitude"), eofs, {"long_name": "Empirical Orthogonal Functions"}),
+        "pcs": (("time", "mode"), pcs, {"long_name": "Principal Components"}),
+        "variance_explained": ("mode", variance_explained, {"long_name": "Fraction of variance explained"}),
     },
-    attrs={
-        "title": "EOF Analysis of Southern Hemisphere Mean Sea Level Pressure",
-        "source_file": INPUT_FILE,
-        "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "latitude_bounds": str(LAT_BOUNDS),
-        "n_modes": N_MODES,
-        "svd_method": "full_svd",
-        "computation_time_seconds": time.time() - START_TIME,
-    },
+    coords={"mode": modes, "time": data.time, "latitude": data.latitude, "longitude": data.longitude},
+    attrs={"title": "EOF analysis of Southern Hemisphere mean sea level pressure",
+           "source_file": INPUT_FILE, "latitude_bounds": str(LAT_BOUNDS)},
 )
-
-print(f"Saving to {OUTPUT_FILE}")
-ds_out.to_netcdf(OUTPUT_FILE, mode="w")
-print(f"Done in {(time.time() - START_TIME) / 60:.1f} min")
+ds.to_netcdf(f"{DATA_DIR}/sam_pca_data_all.nc", mode="w")
+ds.isel(mode=slice(N_LEADING)).to_netcdf(f"{DATA_DIR}/sam_pca_data.nc", mode="w")
+print(f"Saved {len(S)} modes in {(time.time() - t0) / 60:.1f} min")

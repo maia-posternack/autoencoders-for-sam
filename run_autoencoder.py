@@ -2,157 +2,97 @@
 """
 Authors: Maia Posternack (maiaposternack@gmail.com), Kirstin Koepnick (kirstinkoepnick@g.harvard.edu)
 
-In this file we train a convolutional autoencoder on the preprocessed SAM MSL anomolies and save all outputs / weights to be analyzed later. 
+In this file, we train a convolutional autoencoder on the preprocessed SAM MSL anomalies and save all
+outputs / weights to be analyzed later.
+
+--season DJF|MAM|JJA|SON  train on one season. The climatology and trend are then removed on the
+                          seasonal subset, so we start from the raw MSL in the preprocessed file.
+--seed N                  seed TensorFlow (weights and minibatch order) and make the ops deterministic,
+                          for the initialisation ensemble and the latent sweep. The published all-season
+                          run was not seeded.
+--split_seed              the 80/20 train/test split; 5 for every run in the paper.
 
 Input
-sam_preprocessed_data.nc  (from run_preprocess_msl.py; path set via --input_file
-                            or defaults to $SCRATCH/sam_preprocessed_data.nc)
+$SCRATCH/sam_preprocessed_data.nc  (from run_preprocess_msl.py)
 
-Outputs  (all written to --save_dir, default $SCRATCH/autoencoder_models/)
-autoencoder_<tag>.keras        full autoencoder model
-encoder_<tag>.keras            encoder sub-model
-encoded_all_<tag>.npy          latent representations for every time step
+Outputs (in --save_dir, default $SCRATCH/autoencoder_models/)
+autoencoder_<tag>.keras, encoder_<tag>.keras
+encoded_all_<tag>.npy          latent representations for every month
 data_standardized_<tag>.npy    standardised input used for training
-lats_<tag>.npy                 latitude coordinate array
-lons_<tag>.npy                 longitude coordinate array
-times_<tag>.npy                time coordinate array
-summary_<tag>.json             training metadata and performance summary
+lats_, lons_, times_<tag>.npy
+train_indices_, test_indices_<tag>.npy
+lat_weights_<tag>.npy          seasonal runs only: the training weight, to undo it
+history_<tag>.json, summary_<tag>.json
 
-We can run a pbs batch script or use the following commands.
-Our default settings are 64x32x16x8x4 compression, 1x coarsen, 50 epochs.
-We can run with `python run_autoencoder.py --tag <tag> --rounds <rounds> --coarsen <coarsen> --epochs <epochs> --batch_size <batch_size> --lr <lr> --patience <patience> --test_size <test_size> --save_dir <save_dir>`
-
+Example (the published run):
+python run_autoencoder.py --tag sam_autoencoder_1x_64_32_16_8_4_50epochs_cropped --rounds 64 32 16 8 4
 """
-# imports
 import argparse
-import gc
+import json
 import os
 import time
 import numpy as np
 import xarray as xr
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import tensorflow as tf
-from tensorflow import keras
-from keras import layers
-from keras.callbacks import EarlyStopping
-from tensorflow.keras.optimizers import Adam
-import json
 
-
-# this takes all our arguements and saves them locally
-parser = argparse.ArgumentParser(description="Train SAM MSL autoencoder")
-
-parser.add_argument("--tag", type=str, default="sam_ae",
-                    help="Output label used for all saved filenames (default: sam_ae)")
-parser.add_argument("--input_file", type=str, default=None,
-                    help="Path to input .nc file. Defaults to $SCRATCH/sam_preprocessed_data.nc")
-parser.add_argument("--coarsen", type=int, default=1,
-                    help="Spatial subsampling factor (1=full res, 4=quarter res). Default: 4")
-parser.add_argument(
-    "--lat_bounds",
-    type=float,
-    nargs=2,
-    default=[-90.0, -20.0],
-    metavar=("LAT_MIN", "LAT_MAX"),
-    help="Latitude bounds to subset before training (default: -90 -20). Use --lat_bounds -90 90 for global.",
-)
-parser.add_argument("--rounds", type=int, nargs="+", default=[64, 32, 16, 8, 4],
-                    help="Conv filter sizes per encoder stage, e.g. --rounds 64 32 16 8 4. Default: 64 32 16 8 4")
-parser.add_argument("--pool_size", type=int, default=2,
-                    help="Pooling factor (applied to both H and W). Default: 2")
-parser.add_argument("--conv_size", type=int, default=3,
-                    help="Conv kernel size (applied to both H and W). Default: 3")
-parser.add_argument("--epochs", type=int, default=50,
-                    help="Max training epochs (early stopping may end sooner). Default: 50")
-parser.add_argument("--batch_size", type=int, default=16,
-                    help="Training batch size. Default: 16")
-parser.add_argument("--lr", type=float, default=1e-4,
-                    help="Adam learning rate. Default: 1e-4")
-parser.add_argument("--patience", type=int, default=10,
-                    help="Early stopping patience. Default: 10")
-parser.add_argument("--test_size", type=float, default=0.2,
-                    help="Fraction of data held out for validation. Default: 0.2")
-parser.add_argument("--save_dir", type=str, default=None,
-                    help="Output directory. Defaults to $SCRATCH/autoencoder_models")
-args = parser.parse_args()
+from run_preprocess_msl import remove_climatology, remove_linear_trend
 
 SCRATCH = os.path.expandvars("/glade/derecho/scratch/$USER")
-# assumes you have saved the preprocessed SAM MSL anomalies to $SCRATCH/sam_preprocessed_data.nc
-INPUT_FILE = args.input_file or os.path.join(SCRATCH, "sam_preprocessed_data.nc")
-SAVE_DIR = args.save_dir or os.path.join(SCRATCH, "autoencoder_models")
-os.makedirs(SAVE_DIR, exist_ok=True)
+SEASON_MONTHS = {"DJF": [12, 1, 2], "MAM": [3, 4, 5], "JJA": [6, 7, 8], "SON": [9, 10, 11]}
 
-#set all variables from the arguments
-TAG = args.tag
-COARSEN = args.coarsen
-LAT_BOUNDS = tuple(args.lat_bounds) if args.lat_bounds is not None else None
-ROUNDS = args.rounds
-POOL_SIZE = (args.pool_size, args.pool_size)
-CONV_SIZE = (args.conv_size, args.conv_size)
-EPOCHS = args.epochs
-BATCH_SIZE = args.batch_size
-LR = args.lr
-PATIENCE = args.patience
-TEST_SIZE = args.test_size
 
-# start the timer
-t0 = time.time()
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description="Train SAM MSL autoencoder")
+    p.add_argument("--tag", required=True, help="label used for all saved filenames")
+    p.add_argument("--input_file", default=f"{SCRATCH}/sam_preprocessed_data.nc")
+    p.add_argument("--save_dir", default=f"{SCRATCH}/autoencoder_models")
+    p.add_argument("--season", choices=list(SEASON_MONTHS))
+    p.add_argument("--seed", type=int)
+    p.add_argument("--split_seed", type=int, default=5)
+    p.add_argument("--lat_bounds", type=float, nargs=2, default=[-90.0, -20.0],
+                   help="use -90 90 for global")
+    p.add_argument("--coarsen", type=int, default=1, help="spatial subsampling factor")
+    p.add_argument("--rounds", type=int, nargs="+", default=[64, 32, 16, 8, 4],
+                   help="conv filters per encoder stage")
+    p.add_argument("--pool_size", type=int, default=2)
+    p.add_argument("--conv_size", type=int, default=3)
+    p.add_argument("--epochs", type=int, default=50)
+    p.add_argument("--batch_size", type=int, default=16)
+    p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--patience", type=int, default=10)
+    p.add_argument("--test_size", type=float, default=0.2)
+    return p.parse_args(argv)
 
-#load data
-msl_data = xr.open_dataset(INPUT_FILE, chunks={"time": 12})
-da = msl_data["removed_trend_and_climatology"] # this is the preprocessed data
 
-# crop to the latitude bounds if they are provided
-if LAT_BOUNDS is not None:
-    lat0, lat1 = float(LAT_BOUNDS[0]), float(LAT_BOUNDS[1])
-    lat_slice = slice(lat0, lat1) if float(da.latitude[0]) <= float(da.latitude[-1]) else slice(lat1, lat0)
-    da = da.sel(latitude=lat_slice)
+def load_data(args):
+    """Standardised (n, lat, lon, 1) training input, plus coordinates and (seasonal) weights."""
+    ds = xr.open_dataset(args.input_file, chunks={"time": 12})
+    da = ds["MSL" if args.season else "removed_trend_and_climatology"].astype("float32")
+    da = da.transpose("time", "latitude", "longitude").sel(latitude=slice(*sorted(args.lat_bounds)))
+    if args.coarsen > 1:
+        da = da.isel(latitude=slice(None, None, args.coarsen), longitude=slice(None, None, args.coarsen))
 
-# coarsen the data if the coarsen factor is greater than 1. will make faster
-if COARSEN > 1:
-    da = da.isel(latitude=slice(None, None, COARSEN),
-                 longitude=slice(None, None, COARSEN))
+    weights = None
+    if args.season:
+        da = da.isel(time=da.indexes["time"].month.isin(SEASON_MONTHS[args.season]))
+        da, _ = remove_climatology(da)
+        da, _ = remove_linear_trend(da)
+        weights = np.sqrt(np.cos(np.deg2rad(da.latitude.values))).astype(np.float32)
+        weights /= weights.mean()
+        da = (da * xr.DataArray(weights, coords=[da.latitude], dims=["latitude"])).astype("float32")
 
-# get the number of time, latitude, and longitude steps
-n_time = len(da.time)
-n_lat = len(da.latitude)
-n_lon = len(da.longitude)
+    data = da.values
+    x = StandardScaler().fit_transform(data.reshape(-1, 1)).reshape(*data.shape, 1).astype(np.float32)
+    return np.nan_to_num(x), da.time.values, da.latitude.values, da.longitude.values, weights
 
-# create a numpy array to store the data
-data_all = np.empty((n_time, n_lat, n_lon), dtype=np.float32)
 
-# load the data in chunks to optimize memory usage
-chunk_size = 50
-for start in range(0, n_time, chunk_size):
-    end = min(start + chunk_size, n_time)
-    data_all[start:end] = np.asarray(da.isel(time=slice(start, end)).load().data)
-
-# save for future reference
-times = da.time.values
-lats_coarse = da.latitude.values
-lons_coarse = da.longitude.values
-n_samples, lat_length, lon_length = data_all.shape
-
-# standardize the data
-scaler = StandardScaler()
-data_flat = scaler.fit_transform(data_all.reshape(-1, 1))
-data_standardized = data_flat.reshape(n_samples, lat_length, lon_length, 1).astype(np.float32)
-# replace nan with 0
-data_standardized = np.nan_to_num(data_standardized, nan=0.0)
-# free up memory
-del data_flat, data_all
-gc.collect()
-# train test split
-event_indices = np.arange(n_samples)
-x_train, x_test, train_indices, test_indices = train_test_split(
-    data_standardized, event_indices, test_size=TEST_SIZE, random_state=5
-)
-
-# build the autoencoder
 def build_autoencoder(lat_length, lon_length, pool_size, conv_size, rounds):
-    input_img = keras.Input(shape=(lat_length, lon_length, 1))
-    x = input_img
+    from tensorflow import keras
+    from tensorflow.keras import layers
+
+    inp = keras.Input(shape=(lat_length, lon_length, 1))
+    x = inp
     for n in rounds:
         x = layers.Conv2D(n, conv_size, activation="relu", padding="same")(x)
         x = layers.MaxPooling2D(pool_size, padding="same")(x)
@@ -161,71 +101,69 @@ def build_autoencoder(lat_length, lon_length, pool_size, conv_size, rounds):
         x = layers.Conv2D(n, conv_size, activation="relu", padding="same")(x)
         x = layers.UpSampling2D(pool_size)(x)
     x = layers.Conv2D(1, conv_size, activation="tanh", padding="same")(x)
-    # Crop decoder overshoot for non-power-of-2 spatial dims
-    n_pools = len(rounds)
+    # crop the decoder overshoot for non-power-of-2 dims
     h, w = lat_length, lon_length
-    for _ in range(n_pools):
+    for _ in rounds:
         h, w = (h + 1) // 2, (w + 1) // 2
-    out_h, out_w = h * (2 ** n_pools), w * (2 ** n_pools)
-    crop_h = max(0, out_h - lat_length)
-    crop_w = max(0, out_w - lon_length)
-    if crop_h or crop_w:
-        x = layers.Cropping2D(cropping=((0, crop_h), (0, crop_w)))(x)
-    return keras.Model(input_img, x), keras.Model(input_img, encoded)
+    crop = (h * 2 ** len(rounds) - lat_length, w * 2 ** len(rounds) - lon_length)
+    if any(crop):
+        x = layers.Cropping2D(cropping=((0, crop[0]), (0, crop[1])))(x)
+    return keras.Model(inp, x), keras.Model(inp, encoded)
 
-# train the autoencoder
-autoencoder, encoder = build_autoencoder(lat_length, lon_length,
-                                         POOL_SIZE, CONV_SIZE, ROUNDS)
-autoencoder.summary()
-optimizer = Adam(learning_rate=LR, clipvalue=1.0)
-early_stop = EarlyStopping(monitor="val_loss", patience=PATIENCE,
-                           restore_best_weights=True)
-autoencoder.compile(optimizer=optimizer, loss="mean_absolute_error")
 
-init_loss = autoencoder.evaluate(x_train, x_train, batch_size=BATCH_SIZE, verbose=0)
-history = autoencoder.fit(
-    x_train, x_train,
-    epochs=EPOCHS,
-    batch_size=BATCH_SIZE,
-    shuffle=True,
-    validation_data=(x_test, x_test),
-    callbacks=[early_stop],
-    verbose=1,
-)
+if __name__ == "__main__":
+    args = parse_args()
+    t0 = time.time()
+    os.makedirs(args.save_dir, exist_ok=True)
 
-# save the predictions for future use
-encoded_all = encoder.predict(data_standardized)
+    x, times, lats, lons, weights = load_data(args)
+    x_train, x_test, train_idx, test_idx = train_test_split(
+        x, np.arange(len(x)), test_size=args.test_size, random_state=args.split_seed)
 
-# save the outputs
-def sp(fname):
-    return os.path.join(SAVE_DIR, f"{fname}_{TAG}")
+    import tensorflow as tf
+    from tensorflow.keras.callbacks import EarlyStopping
+    from tensorflow.keras.optimizers import Adam
 
-autoencoder.save(sp("autoencoder") + ".keras")
-encoder.save(sp("encoder") + ".keras")
-np.save(sp("encoded_all") + ".npy", encoded_all)
-np.save(sp("data_standardized") + ".npy", data_standardized)
-np.save(sp("lats") + ".npy", lats_coarse)
-np.save(sp("lons") + ".npy", lons_coarse)
-np.save(sp("times") + ".npy", times)
+    if args.seed is not None:
+        tf.keras.utils.set_random_seed(args.seed)
+        tf.config.experimental.enable_op_determinism()
 
-with open(os.path.join(SAVE_DIR, f"summary_{TAG}.json"), "w") as f:
-    json.dump({
-    "tag": TAG,
-    "input_shape": list(data_standardized.shape[1:]),
-    "latent_shape": list(encoded_all.shape[1:]),
-    "compression": round(int(np.prod(data_standardized.shape[1:])) / int(np.prod(encoded_all.shape[1:])), 3),
-    "epochs_run": len(history.history["loss"]),
-    "initial_loss": round(init_loss, 4),
-    "final_loss": round(history.history["loss"][-1], 4),
-    "best_val_loss": round(min(history.history["val_loss"]), 4),
-    "coarsen": COARSEN,
-    "rounds": ROUNDS,
-    "batch_size": BATCH_SIZE,
-    "lr": LR,
-    "wall_seconds": round(time.time() - t0, 1),
-}
-, f, indent=2)
+    autoencoder, encoder = build_autoencoder(x.shape[1], x.shape[2], (args.pool_size,) * 2,
+                                             (args.conv_size,) * 2, args.rounds)
+    autoencoder.summary()
+    autoencoder.compile(optimizer=Adam(learning_rate=args.lr, clipvalue=1.0), loss="mean_absolute_error")
+    history = autoencoder.fit(
+        x_train, x_train, epochs=args.epochs, batch_size=args.batch_size, shuffle=True,
+        validation_data=(x_test, x_test), verbose=1,
+        callbacks=[EarlyStopping(monitor="val_loss", patience=args.patience, restore_best_weights=True)],
+    ).history
+    encoded = encoder.predict(x)
 
-print(f"\n Saving to {SAVE_DIR}/  (tag={TAG})")
-print(f"\n Done in {(time.time()-t0)/60:.1f} min")
-print(f"Best val loss: {min(history.history['val_loss']):.4f}")
+    # save the outputs
+    def sp(name):
+        return os.path.join(args.save_dir, f"{name}_{args.tag}")
+
+    autoencoder.save(sp("autoencoder") + ".keras")
+    encoder.save(sp("encoder") + ".keras")
+    arrays = dict(encoded_all=encoded, data_standardized=x, lats=lats, lons=lons, times=times,
+                  train_indices=train_idx, test_indices=test_idx)
+    if weights is not None:
+        arrays["lat_weights"] = weights
+    for name, arr in arrays.items():
+        np.save(sp(name) + ".npy", arr)
+
+    with open(sp("history") + ".json", "w") as f:
+        json.dump({k: [float(v) for v in vals] for k, vals in history.items()}, f, indent=2)
+    with open(sp("summary") + ".json", "w") as f:
+        json.dump({
+            **vars(args),
+            "input_shape": list(x.shape[1:]),
+            "latent_shape": list(encoded.shape[1:]),
+            "compression": round(int(np.prod(x.shape[1:])) / int(np.prod(encoded.shape[1:])), 3),
+            "epochs_run": len(history["loss"]),
+            "final_loss": round(history["loss"][-1], 4),
+            "best_val_loss": round(min(history["val_loss"]), 4),
+            "wall_seconds": round(time.time() - t0, 1),
+        }, f, indent=2)
+    print(f"Saved to {args.save_dir} (tag={args.tag}) in {(time.time() - t0) / 60:.1f} min; "
+          f"best val loss {min(history['val_loss']):.4f}")

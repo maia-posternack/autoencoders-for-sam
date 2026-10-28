@@ -1,0 +1,25 @@
+#!/bin/bash
+# Latent-dimension sweep (Fig S3): 1, 2, 8 and 16 channels in the last encoder layer at seeds 0-2.
+# 4 channels is the published configuration and comes from the seed ensemble.
+# Submit from the repository root: qsub jobs/latent_sweep.pbs  (queue notes in seed_ensemble.pbs)
+#PBS -N sam_latent_sweep
+#PBS -A UHAR0025
+#PBS -q develop
+#PBS -J 0-11%4
+#PBS -l select=1:ncpus=64:mem=100GB
+#PBS -l walltime=06:00:00
+#PBS -j oe
+
+cd "${PBS_O_WORKDIR}"
+source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+export OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4 NUMEXPR_NUM_THREADS=4
+export TF_NUM_INTRAOP_THREADS=4 TF_NUM_INTEROP_THREADS=1 TF_ENABLE_ONEDNN_OPTS=0 TF_CPP_MIN_LOG_LEVEL=2
+
+CH=(1 2 8 16 1 2 8 16 1 2 8 16)
+SD=(0 0 0 0 1 1 1 1 2 2 2 2)
+CHANNELS=${CH[$PBS_ARRAY_INDEX]}
+SEED=${SD[$PBS_ARRAY_INDEX]}
+python -u run_autoencoder.py --tag sam_era5_latent${CHANNELS}ch_seed${SEED} --seed ${SEED} \
+    --rounds 64 32 16 8 ${CHANNELS} \
+    --save_dir /glade/derecho/scratch/$USER/autoencoder_models/era5_latent_sweep

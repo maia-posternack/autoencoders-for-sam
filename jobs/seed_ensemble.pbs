@@ -1,0 +1,24 @@
+#!/bin/bash
+# Ten-member initialisation ensemble (Figs 2-7, S5, S7, S11, S12). ~2.6 h per member.
+# Submit from the repository root: qsub jobs/seed_ensemble.pbs
+#
+# ncpus=64 for 4 active threads buys sole tenancy: two members fill a 128-core node, and CPU training
+# is memory-bandwidth bound (four jobs sharing a node ran 2.8x slower than one). Do not raise the
+# thread counts without re-checking bitwise determinism.
+#PBS -N sam_seeds
+#PBS -A UHAR0025
+#PBS -q develop
+#PBS -J 0-9%4
+#PBS -l select=1:ncpus=64:mem=100GB
+#PBS -l walltime=06:00:00
+#PBS -j oe
+
+cd "${PBS_O_WORKDIR}"
+source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+export OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4 NUMEXPR_NUM_THREADS=4
+export TF_NUM_INTRAOP_THREADS=4 TF_NUM_INTEROP_THREADS=1 TF_ENABLE_ONEDNN_OPTS=0 TF_CPP_MIN_LOG_LEVEL=2
+
+SEED=${PBS_ARRAY_INDEX}
+python -u run_autoencoder.py --tag sam_era5_autoencoder_seed${SEED} --seed ${SEED} \
+    --save_dir /glade/derecho/scratch/$USER/autoencoder_models/era5_seed_ensemble

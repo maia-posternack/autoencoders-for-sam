@@ -1,0 +1,18 @@
+#!/bin/bash
+# Run figures.ipynb end to end (~25 min, ~10 GB). Submit from the repository root: qsub jobs/figures.pbs
+#PBS -N sam_figures
+#PBS -A UHAR0025
+#PBS -q develop
+#PBS -l select=1:ncpus=8:mem=120GB
+#PBS -l walltime=03:00:00
+#PBS -j oe
+#PBS -o jobs/figures.log
+
+cd "${PBS_O_WORKDIR}"
+source /glade/u/apps/opt/conda/etc/profile.d/conda.sh
+conda activate /glade/work/mposternack/conda-envs/my-npl-tensor
+
+export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 TF_CPP_MIN_LOG_LEVEL=2 TF_ENABLE_ONEDNN_OPTS=0
+
+jupyter nbconvert --to notebook --execute --inplace \
+    --ExecutePreprocessor.timeout=9000 figures.ipynb
