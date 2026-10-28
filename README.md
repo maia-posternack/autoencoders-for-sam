@@ -2,7 +2,7 @@
 
 **Authors**: Maia Posternack, Kirstin Koepnick  
 **Journal**: JGR: Machine Learning and Computation  
-**Code archive**: https://doi.org/10.5281/zenodo.22690306
+**Code archive**: https://doi.org/10.5281/zenodo.23720471
 
 Hello!! This repository contains everything needed to reproduce the results in our paper. A convolutional autoencoder (CAE) and hierarchical clustering are applied to monthly ERA5 mean sea-level pressure (MSLP) over the Southern Hemisphere (1980–2022) to study the regime structure of the Southern Annular Mode (SAM).
 
